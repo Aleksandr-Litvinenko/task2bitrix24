@@ -1,0 +1,6 @@
+.DS_Store
+/outputs/
+/task2/config.local.php
+*.xlsx
+*.xls
+*.zip
