@@ -10,7 +10,7 @@
 cp config.local.example.php config.local.php
 ```
 
-Заполните `LOCAL_BITRIX_WEBHOOK` и `LOCAL_APP_AUTH_PASSWORD`.
+Заполните `LOCAL_BITRIX_WEBHOOK`, `LOCAL_APP_AUTH_PASSWORD` и, если нужна кнопка создания документов УНФ, `LOCAL_UNF_ODATA_USER` / `LOCAL_UNF_ODATA_PASSWORD`.
 
 ```sh
 php -S 127.0.0.1:8080 -t task2
@@ -32,7 +32,18 @@ admin
 BITRIX_WEBHOOK="https://<portal>.bitrix24.ru/rest/<user-id>/<webhook-code>/" APP_AUTH_USER="admin" APP_AUTH_PASSWORD="<strong-password>" php -S 127.0.0.1:8080 -t task2
 ```
 
-Реальный webhook и production-пароль не должны храниться в GitHub.
+Реальные webhook, OData-логин и production-пароли не должны храниться в GitHub.
+
+Кнопка `Создать учёты времени в нашей рабочей УНФ` использует тот же свод сотрудников и часов, что лист `Свод` в Excel. Для каждого сотрудника с ненулевыми часами она создаёт отдельный `Document_УчетВремени` через OData УНФ. Документы по умолчанию только записываются, без проведения; для проведения задайте `UNF_TIME_POST_DOCUMENTS=true`.
+
+Если ФИО в Битрикс и УНФ отличаются, добавьте соответствия в `LOCAL_UNF_EMPLOYEE_KEY_MAP`:
+
+```php
+define('LOCAL_UNF_EMPLOYEE_KEY_MAP', [
+    '1731' => '<Catalog_Сотрудники.Ref_Key>',
+    'Иванов Иван Иванович' => '<Catalog_Сотрудники.Ref_Key>',
+]);
+```
 
 Отчёт берёт задачи, закрытые в выбранном месяце с запасом 7 дней до начала и 7 дней после конца месяца, оставляет `REAL_STATUS` `4` и `5`, затем включает только задачи, где дата в результате выполнения попадает в выбранный месяц. Списанное время суммируется через `task.elapseditem.getlist` по списку пользователей из старого `users.php`.
 

@@ -78,6 +78,12 @@ $lastYear = max((int)date('Y') + 1, $selectedYear);
                     <span>Скачать Excel</span>
                 </button>
             </div>
+            <div class="unf-action">
+                <button id="createUnfTimeButton" class="secondary-action" type="button">
+                    <span>Создать учёты времени в нашей рабочей УНФ</span>
+                </button>
+                <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
+            </div>
         </form>
 
         <dl class="meta">
@@ -118,6 +124,8 @@ $lastYear = max((int)date('Y') + 1, $selectedYear);
         var resultMonthValue = document.getElementById('resultMonthValue');
         var closedFromValue = document.getElementById('closedFromValue');
         var closedToValue = document.getElementById('closedToValue');
+        var createUnfTimeButton = document.getElementById('createUnfTimeButton');
+        var unfActionStatus = document.getElementById('unfActionStatus');
         var monthNames = [
             'Январь',
             'Февраль',
@@ -177,8 +185,92 @@ $lastYear = max((int)date('Y') + 1, $selectedYear);
             }
         }
 
+        function setUnfStatus(message, state) {
+            if (!unfActionStatus) {
+                return;
+            }
+
+            unfActionStatus.textContent = message;
+            unfActionStatus.dataset.state = state || '';
+        }
+
+        function summarizeUnfResult(result) {
+            var created = Array.isArray(result.created) ? result.created : [];
+            var skipped = Array.isArray(result.skipped) ? result.skipped : [];
+            var errors = Array.isArray(result.errors) ? result.errors : [];
+            var lines = [
+                'Создано: ' + created.length + '. Пропущено: ' + skipped.length + '. Ошибок: ' + errors.length + '.'
+            ];
+
+            if (created.length > 0) {
+                lines.push(created.slice(0, 3).map(function (item) {
+                    return item.name + (item.number ? ' - ' + item.number : '');
+                }).join('\n'));
+            }
+
+            if (errors.length > 0) {
+                lines.push(errors.slice(0, 3).map(function (item) {
+                    return item.name + ': ' + item.error;
+                }).join('\n'));
+            } else if (created.length === 0 && skipped.length > 0) {
+                lines.push(skipped.slice(0, 3).map(function (item) {
+                    return item.name + ': ' + item.reason;
+                }).join('\n'));
+            }
+
+            return lines.join('\n');
+        }
+
+        function createUnfTimeDocuments() {
+            if (!createUnfTimeButton) {
+                return;
+            }
+
+            createUnfTimeButton.disabled = true;
+            setUnfStatus('Создаю документы в УНФ...', 'pending');
+
+            fetch('unf_time.php', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: new URLSearchParams({
+                    period: periodInput.value
+                })
+            }).then(function (response) {
+                return response.text().then(function (text) {
+                    var data = {};
+                    try {
+                        data = text ? JSON.parse(text) : {};
+                    } catch (error) {
+                        throw new Error('УНФ вернула некорректный ответ.');
+                    }
+
+                    if (!response.ok && data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    if (!response.ok) {
+                        throw new Error('Запрос завершился с HTTP ' + response.status + '.');
+                    }
+
+                    return data;
+                });
+            }).then(function (data) {
+                var errors = Array.isArray(data.errors) ? data.errors : [];
+                setUnfStatus(summarizeUnfResult(data), errors.length > 0 ? 'error' : 'success');
+            }).catch(function (error) {
+                setUnfStatus(error.message, 'error');
+            }).finally(function () {
+                createUnfTimeButton.disabled = false;
+            });
+        }
+
         periodMonth.addEventListener('change', syncPeriodFromSelects);
         periodYear.addEventListener('change', syncPeriodFromSelects);
+        createUnfTimeButton.addEventListener('click', createUnfTimeDocuments);
 
         var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         var canvas = document.getElementById('cursorTrail');
