@@ -155,7 +155,8 @@ body::after {
 
 .heading,
 .report-form,
-.meta {
+.meta,
+.quick-links {
     position: relative;
     z-index: 1;
 }
@@ -341,6 +342,55 @@ button span {
         var(--surface-strong);
 }
 
+.quick-links {
+    margin-top: 24px;
+    border: 1px solid rgba(151, 174, 203, 0.24);
+    border-radius: 8px;
+    padding: 16px;
+    background:
+        linear-gradient(135deg, rgba(96, 239, 255, 0.07), transparent 46%),
+        rgba(8, 15, 26, 0.68);
+}
+
+.quick-links h2 {
+    margin: 0 0 12px;
+    color: #eef5ff;
+    font-size: 18px;
+    line-height: 1.2;
+}
+
+.quick-link-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.quick-link-grid a {
+    min-height: 50px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(96, 239, 255, 0.28);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #eaf7ff;
+    background: rgba(4, 9, 17, 0.6);
+    font-weight: 800;
+    text-align: center;
+    text-decoration: none;
+    box-shadow: inset 0 0 20px rgba(96, 239, 255, 0.04);
+}
+
+.quick-link-grid a:hover {
+    border-color: rgba(75, 255, 196, 0.56);
+    color: #ffffff;
+    background: rgba(16, 38, 48, 0.72);
+}
+
+.quick-link-grid a:focus-visible {
+    outline: 3px solid rgba(249, 199, 79, 0.8);
+    outline-offset: 3px;
+}
+
 dt {
     color: var(--text-soft);
     font-size: 13px;
@@ -380,7 +430,8 @@ a {
 
     .heading,
     .controls,
-    .meta {
+    .meta,
+    .quick-link-grid {
         grid-template-columns: 1fr;
     }
 

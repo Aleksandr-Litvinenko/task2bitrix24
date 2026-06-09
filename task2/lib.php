@@ -987,6 +987,10 @@ function buildClosedHoursReport(string $period): array
     }
     unset($row);
 
+    $rows = array_filter($rows, static function (array $row): bool {
+        return (float)$row['hours'] > 0 || (int)$row['tasks_count'] > 0;
+    });
+
     usort($allTaskRows, static function (array $left, array $right): int {
         return [$left['task_id'], $left['user_name'], $left['comment']] <=> [$right['task_id'], $right['user_name'], $right['comment']];
     });
