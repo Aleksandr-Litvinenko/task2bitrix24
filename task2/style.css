@@ -111,7 +111,9 @@ body::after {
     z-index: 2;
     min-height: 100vh;
     display: grid;
-    place-items: center;
+    align-content: center;
+    justify-items: center;
+    gap: 18px;
     padding: 32px;
 }
 
@@ -141,6 +143,10 @@ body::after {
     mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     mask-composite: exclude;
     pointer-events: none;
+}
+
+.quick-panel {
+    padding: 24px 34px;
 }
 
 .panel-grid {
@@ -343,19 +349,14 @@ button span {
 }
 
 .quick-links {
-    margin-top: 24px;
-    border: 1px solid rgba(151, 174, 203, 0.24);
-    border-radius: 8px;
-    padding: 16px;
-    background:
-        linear-gradient(135deg, rgba(96, 239, 255, 0.07), transparent 46%),
-        rgba(8, 15, 26, 0.68);
+    position: relative;
+    z-index: 1;
 }
 
 .quick-links h2 {
-    margin: 0 0 12px;
+    margin: 0 0 14px;
     color: #eef5ff;
-    font-size: 18px;
+    font-size: 22px;
     line-height: 1.2;
 }
 
@@ -426,6 +427,10 @@ a {
 
     .panel {
         padding: 24px;
+    }
+
+    .quick-panel {
+        padding: 22px;
     }
 
     .heading,

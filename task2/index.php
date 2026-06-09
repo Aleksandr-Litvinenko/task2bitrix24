@@ -95,14 +95,18 @@ $lastYear = max((int)date('Y') + 1, $selectedYear);
             </div>
         </dl>
 
-        <section class="quick-links" aria-labelledby="quickLinksTitle">
+    </section>
+
+    <section class="panel quick-panel" aria-labelledby="quickLinksTitle">
+        <div class="panel-grid" aria-hidden="true"></div>
+        <div class="quick-links">
             <h2 id="quickLinksTitle">Полезные кнопки</h2>
             <div class="quick-link-grid">
                 <a href="https://task.kodar-msk.ru/" target="_blank" rel="noopener noreferrer">Наш таск</a>
                 <a href="https://nalog1c.bitrix24.ru/" target="_blank" rel="noopener noreferrer">Наш битрикс</a>
                 <a href="https://1cfresh.com/a/sbm/767684" target="_blank" rel="noopener noreferrer">Наша УНФ</a>
             </div>
-        </section>
+        </div>
     </section>
 </main>
 <script>
