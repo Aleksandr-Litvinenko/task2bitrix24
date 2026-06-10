@@ -156,61 +156,106 @@
     var leaderEl = null;
     var hideTimer = null;
 
-    function loadLeaders() {
+    /* Рекорды общие для всех: сервер хранит их в data/leaderboard.json
+       (game_score.php), localStorage — только офлайн-кэш на случай сбоя сети. */
+    var serverLeaders = [];
+    var pendingScore = 0;
+    var sendTimer = null;
+    var lastSentAt = 0;
+
+    function cacheLeaders() {
         try {
-            var parsed = JSON.parse(localStorage.getItem('ccLeaders2') || '[]');
+            localStorage.setItem('ccLeadersCache', JSON.stringify(serverLeaders));
+        } catch (error) {
+            /* без кэша */
+        }
+    }
+
+    function loadCachedLeaders() {
+        try {
+            var parsed = JSON.parse(localStorage.getItem('ccLeadersCache') || '[]');
             return Array.isArray(parsed) ? parsed : [];
         } catch (error) {
             return [];
         }
     }
 
-    function saveLeaders(leaders) {
-        try {
-            localStorage.setItem('ccLeaders2', JSON.stringify(leaders));
-        } catch (error) {
-            /* localStorage недоступен — игра работает без сохранения */
-        }
-    }
-
-    (function initHighScore() {
-        var leaders = loadLeaders();
-        for (var i = 0; i < leaders.length; i++) {
-            if (leaders[i] && leaders[i].name === gameUser) {
-                highScore = parseInt(String(leaders[i].score), 10) || 0;
-                return;
-            }
-        }
-    }());
-
-    function recordScore(score) {
-        if (score <= 0) {
+    function applyServerData(data) {
+        if (!data || data.ok === false) {
             return;
         }
 
-        var leaders = loadLeaders();
-        var entry = null;
-
-        for (var i = 0; i < leaders.length; i++) {
-            if (leaders[i] && leaders[i].name === gameUser) {
-                entry = leaders[i];
-                break;
-            }
+        if (Array.isArray(data.leaders)) {
+            serverLeaders = data.leaders;
+            cacheLeaders();
         }
 
-        if (entry) {
-            if (score > entry.score) {
-                entry.score = score;
-            }
-        } else {
-            leaders.push({ name: gameUser, score: score });
+        var myBest = parseInt(String(data.my_best), 10) || 0;
+        if (myBest > highScore) {
+            highScore = myBest;
         }
 
-        leaders.sort(function (left, right) {
-            return right.score - left.score;
-        });
-        saveLeaders(leaders.slice(0, 5));
+        if (leaderEl) {
+            renderLeaderboard();
+        }
     }
+
+    function fetchLeaders() {
+        fetch('game_score.php', {
+            method: 'GET',
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        }).then(function (response) {
+            return response.ok ? response.json() : null;
+        }).then(applyServerData).catch(function () {
+            serverLeaders = loadCachedLeaders();
+        });
+    }
+
+    function sendScoreNow() {
+        if (sendTimer) {
+            clearTimeout(sendTimer);
+            sendTimer = null;
+        }
+
+        if (pendingScore <= 0) {
+            return;
+        }
+
+        lastSentAt = Date.now();
+        var score = pendingScore;
+
+        fetch('game_score.php', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+            },
+            body: new URLSearchParams({ score: String(score) })
+        }).then(function (response) {
+            return response.ok ? response.json() : null;
+        }).then(applyServerData).catch(function () {
+            /* сеть подвела — результат уйдёт со следующей попыткой */
+        });
+    }
+
+    function recordScore(score) {
+        if (score <= 0 || score <= pendingScore) {
+            return;
+        }
+
+        pendingScore = score;
+
+        // Не чаще раза в 2 секунды, с добивкой последнего результата.
+        if (Date.now() - lastSentAt > 2000) {
+            sendScoreNow();
+        } else if (!sendTimer) {
+            sendTimer = setTimeout(sendScoreNow, 2200);
+        }
+    }
+
+    fetchLeaders();
 
     function escapeHtml(value) {
         return String(value).replace(/[&<>"']/g, function (char) {
@@ -228,7 +273,8 @@
 
         leaderEl.classList.remove('is-faded');
 
-        var leaders = loadLeaders();
+        var leaders = serverLeaders.length > 0 ? serverLeaders : loadCachedLeaders();
+        leaders = leaders.slice(0, 5);
         var rows = '';
 
         for (var i = 0; i < leaders.length; i++) {
@@ -274,9 +320,10 @@
 
         if (streak > highScore) {
             highScore = streak;
+            // Новый личный рекорд — отправляем на сервер в общую таблицу.
+            recordScore(streak);
         }
 
-        recordScore(streak);
         lastClickAt = now;
         totalClicks += 1;
 
