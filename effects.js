@@ -144,6 +144,9 @@
     }
 
     window.__ccShape = burstShape;
+    window.__ccBurstCount = function (score) {
+        return Math.min(score < 100 ? score : (score % 100) + 1, 48);
+    };
 
     var gameUser = (typeof window.CC_USER === 'string' && window.CC_USER !== '') ? window.CC_USER : 'гость';
     var totalClicks = 0;
@@ -277,10 +280,14 @@
         lastClickAt = now;
         totalClicks += 1;
 
-        // Число фигур равно длине серии: 1-й клик — 1, 5-й — 5.
-        // Вид фигуры и цвет зависят от набранных баллов (см. burstShape).
+        // Число фигур растёт внутри уровня и обнуляется на новом уровне:
+        // 1-й круг — 1, 99-й — 99; на 100 появляется 1 треугольник, на 101 — 2,
+        // на 200 — 1 четырёхугольник и так далее (см. burstShape).
         var shape = burstShape(streak);
-        var burstCount = Math.min(streak, 48);
+        // Круги: 1-й балл — 1 круг... 99-й — 99. Дальше каждый уровень с единицы:
+        // 100 — 1 треугольник, 101 — 2, ... 200 — 1 четырёхугольник.
+        var levelCount = streak < 100 ? streak : (streak % 100) + 1;
+        var burstCount = Math.min(levelCount, 48);
         var burstSpread = 60 + burstCount * 6;
 
         for (var i = 0; i < burstCount; i++) {

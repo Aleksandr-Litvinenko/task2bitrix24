@@ -97,14 +97,14 @@ require __DIR__ . '/partials/head.php';
                 <button id="createUnfTimeButton" class="secondary-action" type="button">
                     <span>создать "Учеты времени" в БОЕВОЙ УНФ</span>
                 </button>
-                <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
+                <div id="unfActionStatus" class="action-log" role="log" aria-live="polite" aria-label="Журнал создания учётов времени"></div>
             </div>
 
             <div class="unf-action">
                 <button id="createUnfWorkOrderButton" class="secondary-action" type="button">
                     <span>создать "Задания на работу" в БОЕВОЙ УНФ</span>
                 </button>
-                <p id="workOrderActionStatus" class="action-status" role="status" aria-live="polite"></p>
+                <div id="workOrderActionStatus" class="action-log" role="log" aria-live="polite" aria-label="Журнал создания заданий на работу"></div>
             </div>
         <?php endif; ?>
     </section>
@@ -195,13 +195,31 @@ require __DIR__ . '/partials/head.php';
             }
         }
 
-        function setActionStatus(statusElement, message, state) {
-            if (!statusElement) {
+        function appendLog(logElement, message, state) {
+            if (!logElement) {
                 return;
             }
 
-            statusElement.textContent = message;
-            statusElement.dataset.state = state || '';
+            var now = new Date();
+            var pad2 = function (value) {
+                return String(value).padStart(2, '0');
+            };
+            var time = pad2(now.getHours()) + ':' + pad2(now.getMinutes()) + ':' + pad2(now.getSeconds());
+
+            String(message).split('\n').forEach(function (lineText, index) {
+                if (lineText === '') {
+                    return;
+                }
+
+                var line = document.createElement('div');
+                line.className = 'action-log-line';
+                line.dataset.state = state || '';
+                line.textContent = (index === 0 ? time + '  ' : '        ') + lineText;
+                logElement.appendChild(line);
+            });
+
+            // Свежие записи внизу; вверх можно листать.
+            logElement.scrollTop = logElement.scrollHeight;
         }
 
         function summarizeUnfResult(result) {
@@ -212,21 +230,17 @@ require __DIR__ . '/partials/head.php';
                 'Создано: ' + created.length + '. Пропущено: ' + skipped.length + '. Ошибок: ' + errors.length + '.'
             ];
 
-            if (created.length > 0) {
-                lines.push(created.slice(0, 3).map(function (item) {
-                    return item.name + (item.number ? ' - ' + item.number : '');
-                }).join('\n'));
-            }
+            created.forEach(function (item) {
+                lines.push('+ ' + item.name + (item.number ? ' — ' + item.number : '') + (item.hours ? ' (' + item.hours + ' ч)' : ''));
+            });
 
-            if (errors.length > 0) {
-                lines.push(errors.slice(0, 3).map(function (item) {
-                    return item.name + ': ' + item.error;
-                }).join('\n'));
-            } else if (created.length === 0 && skipped.length > 0) {
-                lines.push(skipped.slice(0, 3).map(function (item) {
-                    return item.name + ': ' + item.reason;
-                }).join('\n'));
-            }
+            skipped.forEach(function (item) {
+                lines.push('~ ' + item.name + ': ' + item.reason + (item.existing_number ? ' (' + item.existing_number + ')' : ''));
+            });
+
+            errors.forEach(function (item) {
+                lines.push('! ' + item.name + ': ' + item.error);
+            });
 
             return lines.join('\n');
         }
@@ -238,7 +252,7 @@ require __DIR__ . '/partials/head.php';
 
             button.addEventListener('click', function () {
                 button.disabled = true;
-                setActionStatus(statusElement, pendingMessage, 'pending');
+                appendLog(statusElement, pendingMessage, 'pending');
 
                 fetch(endpoint, {
                     method: 'POST',
@@ -271,9 +285,9 @@ require __DIR__ . '/partials/head.php';
                     });
                 }).then(function (data) {
                     var errors = Array.isArray(data.errors) ? data.errors : [];
-                    setActionStatus(statusElement, summarizeUnfResult(data), errors.length > 0 ? 'error' : 'success');
+                    appendLog(statusElement, summarizeUnfResult(data), errors.length > 0 ? 'error' : 'success');
                 }).catch(function (error) {
-                    setActionStatus(statusElement, error.message, 'error');
+                    appendLog(statusElement, error.message, 'error');
                 }).finally(function () {
                     button.disabled = false;
                 });

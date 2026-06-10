@@ -364,6 +364,46 @@ button span {
     white-space: pre-line;
 }
 
+/* Отладочный журнал рядом с кнопками УНФ: ход действий и ошибки, листается вверх */
+.action-log {
+    align-self: stretch;
+    min-height: 58px;
+    max-height: 132px;
+    overflow-y: auto;
+    border: 1px solid rgba(141, 164, 190, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: rgba(2, 6, 12, 0.82);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+    box-shadow: inset 0 0 18px rgba(96, 239, 255, 0.04);
+}
+
+.action-log:empty::before {
+    content: "журнал действий появится здесь...";
+    color: rgba(154, 169, 187, 0.55);
+    font-style: italic;
+}
+
+.action-log-line {
+    color: var(--text-soft);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.action-log-line[data-state="pending"] {
+    color: var(--amber);
+}
+
+.action-log-line[data-state="success"] {
+    color: var(--green);
+}
+
+.action-log-line[data-state="error"] {
+    color: #ff8d8d;
+}
+
 .action-status[data-state="pending"] {
     color: var(--amber);
 }
