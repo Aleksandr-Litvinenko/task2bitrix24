@@ -196,6 +196,27 @@ require __DIR__ . '/partials/head.php';
             '6': 'отложенные'
         };
 
+        function refreshColumns() {
+            document.querySelectorAll('.board-column').forEach(function (column) {
+                var cards = column.querySelectorAll('.task-card');
+                var visibleCount = 0;
+
+                cards.forEach(function (card) {
+                    if (!card.classList.contains('is-filtered-out')) {
+                        visibleCount++;
+                    }
+                });
+
+                // Проект без видимых задач скрывается вместе с колонкой.
+                column.classList.toggle('is-filtered-out', cards.length > 0 && visibleCount === 0);
+
+                var counter = column.querySelector('.board-count');
+                if (counter) {
+                    counter.textContent = String(visibleCount);
+                }
+            });
+        }
+
         document.querySelectorAll('.filter-toggle').forEach(function (button) {
             button.addEventListener('click', function () {
                 var status = button.dataset.status;
@@ -209,6 +230,8 @@ require __DIR__ . '/partials/head.php';
                 document.querySelectorAll('.task-card[data-status="' + status + '"]').forEach(function (card) {
                     card.classList.toggle('is-filtered-out', !nextVisible);
                 });
+
+                refreshColumns();
             });
         });
     }());

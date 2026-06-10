@@ -1224,6 +1224,10 @@ a {
     display: none;
 }
 
+.board-column.is-filtered-out {
+    display: none;
+}
+
 /* Админ-панель */
 .admin-grid {
     position: relative;

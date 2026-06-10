@@ -25,7 +25,7 @@
         context.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
-    function addPoint(x, y, scale) {
+    function addPoint(x, y, scale, shape) {
         scale = scale || 1;
         pointer.x = x;
         pointer.y = y;
@@ -36,12 +36,30 @@
             scale: scale,
             life: scale > 1 ? 920 : 760,
             vx: (Math.random() - 0.5) * 0.35 * scale,
-            vy: (Math.random() - 0.5) * 0.35 * scale
+            vy: (Math.random() - 0.5) * 0.35 * scale,
+            sides: shape && shape.sides ? shape.sides : 0,
+            color: shape && shape.color ? shape.color : '',
+            rotation: Math.random() * Math.PI * 2
         });
 
         if (points.length > 72) {
             points.shift();
         }
+    }
+
+    function drawPolygon(x, y, radius, sides, rotation) {
+        context.beginPath();
+        for (var v = 0; v < sides; v++) {
+            var angle = rotation + (v / sides) * Math.PI * 2;
+            var px = x + Math.cos(angle) * radius;
+            var py = y + Math.sin(angle) * radius;
+            if (v === 0) {
+                context.moveTo(px, py);
+            } else {
+                context.lineTo(px, py);
+            }
+        }
+        context.closePath();
     }
 
     function draw() {
@@ -69,9 +87,18 @@
                 context.stroke();
             }
 
-            context.beginPath();
-            context.arc(point.x, point.y, (2.2 + opacity * 3.4) * scale, 0, Math.PI * 2);
-            context.fillStyle = 'rgba(75, 255, 196, ' + (opacity * (scale > 1 ? 0.2 : 0.32)) + ')';
+            var radius = (2.2 + opacity * 3.4) * scale;
+            var fillColor = point.color || '75, 255, 196';
+
+            if (point.sides >= 3) {
+                // Фигуры мини-игры вращаются по мере угасания.
+                drawPolygon(point.x, point.y, radius, point.sides, point.rotation + age * 1.6);
+            } else {
+                context.beginPath();
+                context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+            }
+
+            context.fillStyle = 'rgba(' + fillColor + ', ' + (opacity * (scale > 1 ? 0.28 : 0.32)) + ')';
             context.fill();
         }
 
@@ -93,6 +120,31 @@
        Рекорды сохраняются по логину (Basic Auth). */
     var GAME_GAP_MS = 5000;
     var GAME_HIDE_MS = 10000;
+    /* Палитра циклов: каждые 1000 баллов — новый цвет, фигуры начинаются с круга. */
+    var GAME_PALETTE = [
+        '75, 255, 196',
+        '249, 199, 79',
+        '255, 141, 141',
+        '52, 120, 246',
+        '188, 134, 255',
+        '96, 239, 255'
+    ];
+
+    /* Уровни фигур: 0-99 — круг, 100-199 — треугольник, 200-299 — четырёхугольник
+       и так далее (+1 угол за каждые 100 баллов). Каждые 1000 баллов цикл
+       начинается заново с круга, но уже в новом цвете. */
+    function burstShape(score) {
+        var cycle = Math.floor(score / 1000);
+        var step = Math.floor((score % 1000) / 100);
+
+        return {
+            sides: step === 0 ? 0 : step + 2,
+            color: GAME_PALETTE[cycle % GAME_PALETTE.length]
+        };
+    }
+
+    window.__ccShape = burstShape;
+
     var gameUser = (typeof window.CC_USER === 'string' && window.CC_USER !== '') ? window.CC_USER : 'гость';
     var totalClicks = 0;
     var streak = 0;
@@ -225,12 +277,14 @@
         lastClickAt = now;
         totalClicks += 1;
 
-        // Число шариков равно длине серии: 1-й клик — 1 шарик, 5-й — 5.
+        // Число фигур равно длине серии: 1-й клик — 1, 5-й — 5.
+        // Вид фигуры и цвет зависят от набранных баллов (см. burstShape).
+        var shape = burstShape(streak);
         var burstCount = Math.min(streak, 48);
         var burstSpread = 60 + burstCount * 6;
 
         for (var i = 0; i < burstCount; i++) {
-            addPoint(event.clientX + (Math.random() - 0.5) * burstSpread, event.clientY + (Math.random() - 0.5) * burstSpread, 4);
+            addPoint(event.clientX + (Math.random() - 0.5) * burstSpread, event.clientY + (Math.random() - 0.5) * burstSpread, 4, shape);
         }
 
         if (totalClicks >= 5 || leaderEl) {
