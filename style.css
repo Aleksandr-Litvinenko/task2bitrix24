@@ -326,10 +326,13 @@ button span {
 }
 
 .unf-action {
+    position: relative;
+    z-index: 1;
     display: grid;
     grid-template-columns: minmax(300px, 430px) minmax(0, 1fr);
     gap: 12px;
     align-items: center;
+    margin-top: 16px;
 }
 
 .secondary-action {

@@ -863,6 +863,10 @@ function fetchTaskElapsedItemsBulk(array $taskIds, array $userIds): array
 
 function buildClosedHoursReport(string $period): array
 {
+    // Отчёт делает десятки REST-запросов и на больших месяцах не укладывается
+    // в стандартные 30 секунд max_execution_time.
+    set_time_limit(600);
+
     [$monthStart, $periodStart, $periodEnd] = monthPeriod($period);
 
     $users = fetchReportUsers();
@@ -1796,6 +1800,8 @@ function boardTaskCard(array $task, array $userNames, array $companyNames): arra
 
 function buildProjectBoard(string $mode, string $period): array
 {
+    set_time_limit(300);
+
     $mode = $mode === 'closed' ? 'closed' : 'active';
     [$monthStart] = monthPeriod($period);
 

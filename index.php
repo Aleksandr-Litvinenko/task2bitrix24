@@ -69,12 +69,6 @@ require __DIR__ . '/partials/head.php';
                     <span>Скачать Excel</span>
                 </button>
             </div>
-            <div class="unf-action">
-                <button id="createUnfTimeButton" class="secondary-action" type="button">
-                    <span>Создать учёты времени в нашей рабочей УНФ</span>
-                </button>
-                <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
-            </div>
         </form>
 
         <dl class="meta">
@@ -91,6 +85,13 @@ require __DIR__ . '/partials/head.php';
                 <dd id="closedToValue"><?= h($periodEnd->format('d.m.Y')) ?></dd>
             </div>
         </dl>
+
+        <div class="unf-action">
+            <button id="createUnfTimeButton" class="secondary-action" type="button">
+                <span>Создать учёты времени в нашей рабочей УНФ</span>
+            </button>
+            <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
+        </div>
     </section>
 
     <section class="panel quick-panel" aria-labelledby="quickLinksTitle">

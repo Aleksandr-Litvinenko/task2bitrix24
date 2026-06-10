@@ -84,8 +84,9 @@
         requestAnimationFrame(draw);
     }
 
-    /* Мини-игра «терпеливый клик»: пауза между кликами от 5 секунд
-       растит серию (+1 к счёту) и размер вспышки; ранний клик сбрасывает серию.
+    /* Мини-игра «кликер»: цель — накликать как можно больше подряд,
+       держа паузу между кликами не больше 5 секунд. Опоздал — серия
+       начинается заново, вспышка растёт вместе с серией.
        После 5 кликов в правом верхнем углу появляется таблица лидеров. */
     var GAME_GAP_MS = 5000;
     var totalClicks = 0;
@@ -168,7 +169,7 @@
         }
 
         if (rows === '') {
-            rows = '<div class="cc-leader-row"><span>Выдержите 5 секунд между кликами</span></div>';
+            rows = '<div class="cc-leader-row"><span>Кликайте не реже раза в 5 секунд</span></div>';
         }
 
         leaderEl.innerHTML =
@@ -185,12 +186,13 @@
     });
     window.addEventListener('pointerdown', function (event) {
         var now = performance.now();
-        var qualifies = lastClickAt === 0 || (now - lastClickAt) >= GAME_GAP_MS;
+        var inChain = lastClickAt !== 0 && (now - lastClickAt) <= GAME_GAP_MS;
 
-        if (qualifies) {
+        if (inChain) {
             streak += 1;
         } else {
-            streak = 0;
+            // Слишком долгая пауза (или первый клик) — серия начинается заново.
+            streak = 1;
         }
 
         if (streak > highScore) {
