@@ -70,6 +70,8 @@ define('UNF_WORK_ORDER_STATE_KEY', configValue('UNF_WORK_ORDER_STATE_KEY', 'LOCA
 define('UNF_WORK_ORDER_CALENDAR_KEY', configValue('UNF_WORK_ORDER_CALENDAR_KEY', 'LOCAL_UNF_WORK_ORDER_CALENDAR_KEY', '615502ec-f2ed-11f0-8cc9-fa163ecd09c5'));
 // План = факт закрытых часов × этот коэффициент (+10%).
 define('UNF_WORK_ORDER_UPLIFT', (float)configValue('UNF_WORK_ORDER_UPLIFT', 'LOCAL_UNF_WORK_ORDER_UPLIFT', '1.1'));
+// Цена часа в задании на работу; сумма считается автоматически (цена × часы).
+define('UNF_WORK_ORDER_RATE', (float)configValue('UNF_WORK_ORDER_RATE', 'LOCAL_UNF_WORK_ORDER_RATE', '4500'));
 define('UNF_EMPLOYEE_KEY_MAP', configArrayValue('UNF_EMPLOYEE_KEY_MAP', 'LOCAL_UNF_EMPLOYEE_KEY_MAP'));
 
 // Оригинальный task/csv_closed.php считает закрытые задачи по REAL_STATUS 4 и 5.

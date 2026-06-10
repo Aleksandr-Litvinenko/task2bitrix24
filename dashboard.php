@@ -125,8 +125,22 @@ require __DIR__ . '/partials/head.php';
                     $barWidth = $maxHours > 0 ? max(4, (int)round($hours / $maxHours * 100)) : 0;
                     $medal = $medals[$rank] ?? '';
                     ?>
+                    <?php
+                    $photo = trim((string)($employee['photo'] ?? ''));
+                    $initialsSource = preg_split('/\s+/u', trim((string)($employee['name'] ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                    $initials = '';
+                    foreach (array_slice($initialsSource, 0, 2) as $word) {
+                        $initials .= mb_substr($word, 0, 1, 'UTF-8');
+                    }
+                    ?>
                     <li class="leader-row<?= $medal !== '' ? ' leader-row--' . $medal : '' ?>">
                         <span class="leader-rank"><?= $rank ?></span>
+                        <?php if ($photo !== ''): ?>
+                            <img class="leader-avatar" src="<?= h($photo) ?>" alt="" loading="lazy"
+                                 onerror="this.outerHTML='<span class=&quot;leader-avatar leader-avatar--initials&quot;><?= h($initials) ?></span>'">
+                        <?php else: ?>
+                            <span class="leader-avatar leader-avatar--initials"><?= h($initials !== '' ? $initials : '·') ?></span>
+                        <?php endif; ?>
                         <div class="leader-body">
                             <div class="leader-line">
                                 <span class="leader-name"><?= h((string)($employee['name'] ?? '-')) ?></span>

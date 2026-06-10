@@ -86,24 +86,24 @@
 
     /* Мини-игра «кликер»: цель — накликать как можно больше подряд,
        держа паузу между кликами не больше 5 секунд. Опоздал — серия
-       начинается заново, вспышка растёт вместе с серией.
-       После 5 кликов в правом верхнем углу появляется таблица лидеров. */
+       начинается заново. Каждый клик добавляет по шарику на каждый
+       клик серии: 1-й клик — 1 шарик, 5-й — 5 шариков.
+       После 5 кликов в правом верхнем углу появляется таблица лидеров;
+       если не кликать 10 секунд, она плавно исчезает.
+       Рекорды сохраняются по логину (Basic Auth). */
     var GAME_GAP_MS = 5000;
+    var GAME_HIDE_MS = 10000;
+    var gameUser = (typeof window.CC_USER === 'string' && window.CC_USER !== '') ? window.CC_USER : 'гость';
     var totalClicks = 0;
     var streak = 0;
     var lastClickAt = 0;
     var highScore = 0;
     var leaderEl = null;
-
-    try {
-        highScore = parseInt(localStorage.getItem('ccHighScore') || '0', 10) || 0;
-    } catch (error) {
-        highScore = 0;
-    }
+    var hideTimer = null;
 
     function loadLeaders() {
         try {
-            var parsed = JSON.parse(localStorage.getItem('ccLeaders') || '[]');
+            var parsed = JSON.parse(localStorage.getItem('ccLeaders2') || '[]');
             return Array.isArray(parsed) ? parsed : [];
         } catch (error) {
             return [];
@@ -112,16 +112,21 @@
 
     function saveLeaders(leaders) {
         try {
-            localStorage.setItem('ccLeaders', JSON.stringify(leaders));
+            localStorage.setItem('ccLeaders2', JSON.stringify(leaders));
         } catch (error) {
             /* localStorage недоступен — игра работает без сохранения */
         }
     }
 
-    function todayLabel() {
-        var now = new Date();
-        return ('0' + now.getDate()).slice(-2) + '.' + ('0' + (now.getMonth() + 1)).slice(-2) + '.' + now.getFullYear();
-    }
+    (function initHighScore() {
+        var leaders = loadLeaders();
+        for (var i = 0; i < leaders.length; i++) {
+            if (leaders[i] && leaders[i].name === gameUser) {
+                highScore = parseInt(String(leaders[i].score), 10) || 0;
+                return;
+            }
+        }
+    }());
 
     function recordScore(score) {
         if (score <= 0) {
@@ -129,11 +134,10 @@
         }
 
         var leaders = loadLeaders();
-        var label = todayLabel();
         var entry = null;
 
         for (var i = 0; i < leaders.length; i++) {
-            if (leaders[i] && leaders[i].date === label) {
+            if (leaders[i] && leaders[i].name === gameUser) {
                 entry = leaders[i];
                 break;
             }
@@ -144,13 +148,19 @@
                 entry.score = score;
             }
         } else {
-            leaders.push({ date: label, score: score });
+            leaders.push({ name: gameUser, score: score });
         }
 
         leaders.sort(function (left, right) {
             return right.score - left.score;
         });
         saveLeaders(leaders.slice(0, 5));
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, function (char) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+        });
     }
 
     function renderLeaderboard() {
@@ -161,11 +171,14 @@
             document.body.appendChild(leaderEl);
         }
 
+        leaderEl.classList.remove('is-faded');
+
         var leaders = loadLeaders();
         var rows = '';
 
         for (var i = 0; i < leaders.length; i++) {
-            rows += '<div class="cc-leader-row"><span>' + (i + 1) + '. ' + leaders[i].date + '</span><strong>' + leaders[i].score + '</strong></div>';
+            var marker = leaders[i].name === gameUser ? ' ★' : '';
+            rows += '<div class="cc-leader-row"><span>' + (i + 1) + '. ' + escapeHtml(leaders[i].name) + marker + '</span><strong>' + leaders[i].score + '</strong></div>';
         }
 
         if (rows === '') {
@@ -174,9 +187,18 @@
 
         leaderEl.innerHTML =
             '<div class="cc-leader-title">Таблица лидеров</div>' +
-            '<div class="cc-leader-row cc-leader-current"><span>Текущая серия</span><strong>' + streak + '</strong></div>' +
-            '<div class="cc-leader-row"><span>Рекорд</span><strong>' + highScore + '</strong></div>' +
+            '<div class="cc-leader-row cc-leader-current"><span>' + escapeHtml(gameUser) + ' — серия</span><strong>' + streak + '</strong></div>' +
+            '<div class="cc-leader-row"><span>Мой рекорд</span><strong>' + highScore + '</strong></div>' +
             rows;
+
+        if (hideTimer) {
+            clearTimeout(hideTimer);
+        }
+        hideTimer = setTimeout(function () {
+            if (leaderEl) {
+                leaderEl.classList.add('is-faded');
+            }
+        }, GAME_HIDE_MS);
     }
 
     resizeCanvas();
@@ -197,23 +219,18 @@
 
         if (streak > highScore) {
             highScore = streak;
-            try {
-                localStorage.setItem('ccHighScore', String(highScore));
-            } catch (error) {
-                /* без сохранения */
-            }
         }
 
         recordScore(streak);
         lastClickAt = now;
         totalClicks += 1;
 
-        var burstScale = Math.min(4 + streak * 1.5, 16);
-        var burstSpread = 72 + streak * 18;
-        var burstCount = Math.min(18 + streak * 6, 60);
+        // Число шариков равно длине серии: 1-й клик — 1 шарик, 5-й — 5.
+        var burstCount = Math.min(streak, 48);
+        var burstSpread = 60 + burstCount * 6;
 
         for (var i = 0; i < burstCount; i++) {
-            addPoint(event.clientX + (Math.random() - 0.5) * burstSpread, event.clientY + (Math.random() - 0.5) * burstSpread, burstScale);
+            addPoint(event.clientX + (Math.random() - 0.5) * burstSpread, event.clientY + (Math.random() - 0.5) * burstSpread, 4);
         }
 
         if (totalClicks >= 5 || leaderEl) {

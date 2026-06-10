@@ -88,14 +88,14 @@ require __DIR__ . '/partials/head.php';
 
         <div class="unf-action">
             <button id="createUnfTimeButton" class="secondary-action" type="button">
-                <span>создать Учеты времени в нашей РАБОЧЕЙ унф</span>
+                <span>создать "Учеты времени" в БОЕВОЙ УНФ</span>
             </button>
             <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
         </div>
 
         <div class="unf-action">
             <button id="createUnfWorkOrderButton" class="secondary-action" type="button">
-                <span>создать Задания на работу в нашей РАБОЧЕЙ унф</span>
+                <span>создать "Задания на работу" в БОЕВОЙ УНФ</span>
             </button>
             <p id="workOrderActionStatus" class="action-status" role="status" aria-live="polite"></p>
         </div>

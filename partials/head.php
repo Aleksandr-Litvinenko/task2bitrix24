@@ -25,11 +25,16 @@ $navQuery = '?period=' . rawurlencode($navPeriod);
 $styleVersion = is_file(__DIR__ . '/../style.css') ? (string)filemtime(__DIR__ . '/../style.css') : '1';
 
 $navItems = [
-    ['key' => 'main', 'label' => 'Основной', 'href' => 'index.php' . $navQuery, 'external' => false],
+    ['key' => 'main', 'label' => 'Главная', 'href' => 'index.php' . $navQuery, 'external' => false],
     ['key' => 'tasks', 'label' => 'Задачи', 'href' => 'tasks.php' . $navQuery, 'external' => false],
     ['key' => 'dashboard', 'label' => 'Дашборд', 'href' => 'dashboard.php' . $navQuery, 'external' => false],
-    ['key' => 'wantsame', 'label' => 'ХОЧУ ТАКЖЕ', 'href' => TELEGRAM_CHANNEL_URL, 'external' => true],
+    ['key' => 'wantsame', 'label' => 'ХОЧУ ТАКЖЕ', 'href' => 'want.php' . $navQuery, 'external' => false],
 ];
+
+$gameUserLogin = trim((string)($_SERVER['PHP_AUTH_USER'] ?? ''));
+if ($gameUserLogin === '') {
+    $gameUserLogin = 'гость';
+}
 ?>
 <!doctype html>
 <html lang="ru">
@@ -38,6 +43,7 @@ $navItems = [
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= h($pageTitle) ?></title>
     <link rel="stylesheet" href="style.css?v=<?= h($styleVersion) ?>">
+    <script>window.CC_USER = <?= json_encode($gameUserLogin, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;</script>
 </head>
 <body>
 <div class="ambient-glow" aria-hidden="true"></div>

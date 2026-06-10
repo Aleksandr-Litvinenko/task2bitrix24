@@ -1675,6 +1675,37 @@ function fetchUserNamesBulk(array $userIds): array
     return $result;
 }
 
+function fetchUserPhotosBulk(array $userIds): array
+{
+    $userIds = array_values(array_unique(array_filter(array_map('intval', $userIds))));
+    if (empty($userIds)) {
+        return [];
+    }
+
+    $commands = [];
+    foreach ($userIds as $userId) {
+        $commands['u' . $userId] = bitrixCommand('user.get', ['ID' => $userId]);
+    }
+
+    try {
+        $batch = bitrixBatchAll($commands);
+    } catch (Throwable $e) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($userIds as $userId) {
+        $items = $batch['result']['u' . $userId] ?? [];
+        $user = (is_array($items) && isset($items[0]) && is_array($items[0])) ? $items[0] : [];
+        $photo = trim((string)($user['PERSONAL_PHOTO'] ?? ''));
+        if ($photo !== '' && preg_match('~^https?://~i', $photo)) {
+            $result[$userId] = $photo;
+        }
+    }
+
+    return $result;
+}
+
 function fetchProjectNamesBulk(array $groupIds): array
 {
     $groupIds = array_values(array_unique(array_filter(array_map('intval', $groupIds))));
@@ -1966,11 +1997,19 @@ function dashboardSnapshotFromReport(array $report): array
     $totalMinutes = (int)($report['total_minutes'] ?? 0);
     $employees = [];
 
+    $employeeIds = [];
+    foreach (($report['rows'] ?? []) as $row) {
+        $employeeIds[] = (int)($row['id'] ?? 0);
+    }
+    $photos = fetchUserPhotosBulk($employeeIds);
+
     foreach (($report['rows'] ?? []) as $row) {
         $minutes = (int)($row['minutes'] ?? 0);
+        $employeeId = (int)($row['id'] ?? 0);
         $employees[] = [
-            'id' => (int)($row['id'] ?? 0),
+            'id' => $employeeId,
             'name' => (string)($row['name'] ?? '-'),
+            'photo' => $photos[$employeeId] ?? '',
             'minutes' => $minutes,
             'hours' => round($minutes / 60, 2),
             'tasks_count' => (int)($row['tasks_count'] ?? 0),

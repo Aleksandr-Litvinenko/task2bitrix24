@@ -81,6 +81,20 @@ require __DIR__ . '/partials/head.php';
             <?php endif; ?>
         </div>
 
+        <?php if ($view === 'active'): ?>
+            <div class="board-filters" aria-label="Фильтры по статусу">
+                <button class="filter-toggle" type="button" data-status="2" aria-pressed="true">
+                    <span>Скрыть ждущие выполнения</span>
+                </button>
+                <button class="filter-toggle" type="button" data-status="3" aria-pressed="true">
+                    <span>Скрыть в работе</span>
+                </button>
+                <button class="filter-toggle" type="button" data-status="6" aria-pressed="true">
+                    <span>Скрыть отложенные</span>
+                </button>
+            </div>
+        <?php endif; ?>
+
         <?php if ($boardError !== ''): ?>
             <div class="board-empty board-empty--error">
                 <p>Не удалось загрузить задачи из Битрикс.</p>
@@ -157,6 +171,31 @@ require __DIR__ . '/partials/head.php';
             </div>
         <?php endif; ?>
     </section>
+<script>
+    (function () {
+        var labels = {
+            '2': 'ждущие выполнения',
+            '3': 'в работе',
+            '6': 'отложенные'
+        };
+
+        document.querySelectorAll('.filter-toggle').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var status = button.dataset.status;
+                var visible = button.getAttribute('aria-pressed') === 'true';
+                var nextVisible = !visible;
+
+                button.setAttribute('aria-pressed', nextVisible ? 'true' : 'false');
+                button.querySelector('span').textContent =
+                    (nextVisible ? 'Скрыть ' : 'Показать ') + (labels[status] || '');
+
+                document.querySelectorAll('.task-card[data-status="' + status + '"]').forEach(function (card) {
+                    card.classList.toggle('is-filtered-out', !nextVisible);
+                });
+            });
+        });
+    }());
+</script>
 <?php if ($view === 'closed'): ?>
 <script>
     (function () {

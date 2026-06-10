@@ -628,7 +628,7 @@ function unfBuildWorkOrderPayload(
     DateTimeImmutable $dateFrom,
     DateTimeImmutable $dateTo
 ): array {
-    $rate = round((float)UNF_TIME_RATE, 2);
+    $rate = round((float)UNF_WORK_ORDER_RATE, 2);
     $sum = round($rate * $planHours, 2);
 
     return [
