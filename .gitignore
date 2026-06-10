@@ -1,0 +1,11 @@
+# Локальные секреты (webhook, пароли) — не коммитим.
+config.local.php
+
+# Снимки дашборда (генерируются во время работы).
+data/*.json
+data/*.tmp
+
+.DS_Store
+
+# Локальные настройки Claude Code
+.claude/
