@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/config.php';
 
 const UNF_ZERO_GUID = '00000000-0000-0000-0000-000000000000';
+const UNF_DAY_ZERO_TIME = '0001-01-01T00:00:00';
 
 function unfOdataRequest(string $method, string $path, ?array $payload = null, array $params = []): array
 {
@@ -450,6 +451,15 @@ function unfBuildTimeDocumentPayload(
     $rate = round((float)UNF_TIME_RATE, 2);
     $sum = round($rate * $hours, 2);
 
+    // Время "С"/"По" по дням: 24 ч -> 00:00-23:59, 22 ч -> 00:00-22:00 и т.д.
+    $dayPrefixes = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+    $dayTimes = [];
+    foreach ($dayPrefixes as $index => $prefix) {
+        $duration = (float)($dayDurations[$index] ?? 0);
+        $dayTimes[$prefix . 'ВремяНачала'] = UNF_DAY_ZERO_TIME;
+        $dayTimes[$prefix . 'ВремяОкончания'] = $duration > 0 ? unfTimeOfDay($duration) : UNF_DAY_ZERO_TIME;
+    }
+
     return [
         'Date' => unfOdataDate($documentDate),
         'DeletionMark' => false,
@@ -483,17 +493,37 @@ function unfBuildTimeDocumentPayload(
                 'ВсДлительность' => $dayDurations[6],
                 'Сумма' => $sum,
                 'Комментарий' => '',
-            ],
+            ] + $dayTimes,
         ],
     ];
+}
+
+function unfFormatHours(float $hours): string
+{
+    $formatted = number_format($hours, 2, '.', '');
+
+    return rtrim(rtrim($formatted, '0'), '.');
+}
+
+function unfTimeOfDay(float $hours): string
+{
+    // 24 часа в УНФ записываются как 00:00-23:59 (само значение часов хранится в Длительности).
+    if ($hours >= 24) {
+        return '0001-01-01T23:59:00';
+    }
+
+    $totalMinutes = (int)round($hours * 60);
+
+    return sprintf('0001-01-01T%02d:%02d:00', intdiv($totalMinutes, 60), $totalMinutes % 60);
 }
 
 function unfTimeDocumentComment(array $row, string $period): string
 {
     $name = trim((string)($row['name'] ?? ''));
     $bitrixUserId = (int)($row['id'] ?? 0);
+    $hours = round((float)($row['hours'] ?? 0), 2);
 
-    return trim('task2 закрытые часы ' . $period . '; Bitrix user ' . $bitrixUserId . '; ' . $name);
+    return trim('#Загружено_task2; загружено ' . unfFormatHours($hours) . ' ч за ' . $period . '; Bitrix user ' . $bitrixUserId . '; ' . $name);
 }
 
 function unfDistributeHours(float $hours): array
@@ -543,4 +573,210 @@ function unfFindExistingTimeDocument(string $employeeKey, DateTimeImmutable $dat
 function unfOdataDate(DateTimeImmutable $date): string
 {
     return $date->format('Y-m-d\TH:i:s');
+}
+
+/* =====================================================================
+ * Задания на работу (Document_ЗаданиеНаРаботу)
+ * ===================================================================== */
+
+function unfWorkOrderDates(string $period): array
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        throw new InvalidArgumentException('Укажите месяц в формате YYYY-MM.');
+    }
+
+    $monthStart = DateTimeImmutable::createFromFormat('!Y-m-d', $period . '-01');
+    if (!$monthStart) {
+        throw new InvalidArgumentException('Некорректный месяц отчёта.');
+    }
+
+    // Задание создаётся 1-м числом СЛЕДУЮЩЕГО месяца и действует весь этот месяц.
+    $nextMonthStart = $monthStart->modify('first day of next month');
+    $documentDate = $nextMonthStart->setTime(12, 0, 0);
+    $dateFrom = $nextMonthStart->setTime(0, 0, 0);
+    $dateTo = $nextMonthStart->modify('last day of this month')->setTime(23, 59, 59);
+
+    return [$documentDate, $dateFrom, $dateTo];
+}
+
+function unfFindExistingWorkOrder(string $employeeKey, DateTimeImmutable $dateFrom): ?array
+{
+    $filter = "Сотрудник_Key eq guid'" . $employeeKey . "'"
+        . " and ДатаНачала eq datetime'" . unfOdataDate($dateFrom) . "'";
+
+    $response = unfOdataRequest('GET', 'Document_ЗаданиеНаРаботу', null, [
+        '$format' => 'json',
+        '$select' => 'Ref_Key,Number,Date,Posted,Сотрудник_Key,ДатаНачала,ДатаОкончания',
+        '$filter' => $filter,
+        '$top' => '1',
+    ]);
+    $items = unfOdataValues($response);
+
+    if ($items === []) {
+        return null;
+    }
+
+    return is_array($items[0]) ? $items[0] : null;
+}
+
+function unfBuildWorkOrderPayload(
+    array $row,
+    string $employeeKey,
+    string $period,
+    float $planHours,
+    DateTimeImmutable $documentDate,
+    DateTimeImmutable $dateFrom,
+    DateTimeImmutable $dateTo
+): array {
+    $rate = round((float)UNF_TIME_RATE, 2);
+    $sum = round($rate * $planHours, 2);
+
+    return [
+        'Date' => unfOdataDate($documentDate),
+        'DeletionMark' => false,
+        'Posted' => false,
+        'ВидОперации' => 'Внешнее',
+        'ВидРабот_Key' => UNF_TIME_WORK_TYPE_KEY,
+        'ВидЦен_Key' => UNF_TIME_PRICE_TYPE_KEY,
+        'ДатаНачала' => unfOdataDate($dateFrom),
+        'ДатаОкончания' => unfOdataDate($dateTo),
+        'КалендарьСотрудника_Key' => UNF_WORK_ORDER_CALENDAR_KEY,
+        'Комментарий' => unfWorkOrderComment($row, $period, $planHours),
+        'Организация_Key' => UNF_TIME_ORGANIZATION_KEY,
+        'ПодписьМОЛ_Key' => UNF_ZERO_GUID,
+        'ПоложениеВидаРабот' => 'ВШапке',
+        'Событие_Key' => UNF_ZERO_GUID,
+        'Состояние_Key' => UNF_WORK_ORDER_STATE_KEY,
+        'Сотрудник_Key' => $employeeKey,
+        'СтруктурнаяЕдиница_Key' => UNF_TIME_STRUCTURAL_UNIT_KEY,
+        'СуммаДокумента' => $sum,
+        'ХозяйственнаяОперация_Key' => UNF_WORK_ORDER_BUSINESS_OPERATION_KEY,
+        'Автор_Key' => UNF_TIME_AUTHOR_KEY,
+        'Работы' => [
+            [
+                'LineNumber' => '1',
+                'ВидРабот_Key' => UNF_TIME_WORK_TYPE_KEY,
+                'Заказчик' => '',
+                'Заказчик_Type' => 'StandardODATA.Undefined',
+                'Номенклатура_Key' => UNF_TIME_NOMENCLATURE_KEY,
+                'Характеристика_Key' => UNF_ZERO_GUID,
+                'Трудоемкость' => $planHours,
+                'Цена' => $rate,
+                'Сумма' => $sum,
+                'Комментарий' => '',
+                'ДатаНачала' => unfOdataDate($dateFrom),
+                'ДатаОкончания' => unfOdataDate($dateTo),
+            ],
+        ],
+    ];
+}
+
+function unfWorkOrderComment(array $row, string $period, float $planHours): string
+{
+    $name = trim((string)($row['name'] ?? ''));
+    $bitrixUserId = (int)($row['id'] ?? 0);
+    $factHours = round((float)($row['hours'] ?? 0), 2);
+
+    return trim('#Загружено_task2; план ' . unfFormatHours($planHours) . ' ч (факт ' . unfFormatHours($factHours)
+        . ' ч за ' . $period . ' +10%); Bitrix user ' . $bitrixUserId . '; ' . $name);
+}
+
+function createUnfWorkOrdersForReport(array $report): array
+{
+    $period = (string)($report['period'] ?? '');
+    [$documentDate, $dateFrom, $dateTo] = unfWorkOrderDates($period);
+    $rows = array_values(array_filter((array)($report['rows'] ?? []), static function ($row): bool {
+        return is_array($row);
+    }));
+    $created = [];
+    $skipped = [];
+    $errors = [];
+
+    foreach ($rows as $row) {
+        $name = (string)($row['name'] ?? '');
+        $hours = round((float)($row['hours'] ?? 0), 2);
+        $bitrixUserId = (int)($row['id'] ?? 0);
+
+        if ($hours <= 0) {
+            $skipped[] = [
+                'bitrix_user_id' => $bitrixUserId,
+                'name' => $name,
+                'hours' => $hours,
+                'reason' => 'Нулевые часы',
+            ];
+        }
+    }
+
+    $rowsToCreate = array_values(array_filter($rows, static function (array $row): bool {
+        return round((float)($row['hours'] ?? 0), 2) > 0;
+    }));
+
+    if ($rowsToCreate !== []) {
+        $employees = unfFetchEmployees();
+
+        foreach ($rowsToCreate as $row) {
+            $name = (string)($row['name'] ?? '');
+            $hours = round((float)($row['hours'] ?? 0), 2);
+            $bitrixUserId = (int)($row['id'] ?? 0);
+            $planHours = round($hours * (float)UNF_WORK_ORDER_UPLIFT, 2);
+
+            try {
+                $employee = unfFindEmployeeForReportRow($row, $employees);
+                $existing = unfFindExistingWorkOrder((string)$employee['Ref_Key'], $dateFrom);
+
+                if ($existing !== null) {
+                    $skipped[] = [
+                        'bitrix_user_id' => $bitrixUserId,
+                        'name' => $name,
+                        'hours' => $planHours,
+                        'reason' => 'Задание на этот месяц уже есть',
+                        'existing_number' => (string)($existing['Number'] ?? ''),
+                        'existing_ref_key' => (string)($existing['Ref_Key'] ?? ''),
+                    ];
+                    continue;
+                }
+
+                $payload = unfBuildWorkOrderPayload($row, (string)$employee['Ref_Key'], $period, $planHours, $documentDate, $dateFrom, $dateTo);
+                $document = unfOdataEntity(unfOdataRequest('POST', 'Document_ЗаданиеНаРаботу', $payload, ['$format' => 'json']));
+
+                if (UNF_TIME_POST_DOCUMENTS && isset($document['Ref_Key'])) {
+                    unfOdataRequest('POST', "Document_ЗаданиеНаРаботу(guid'" . $document['Ref_Key'] . "')/Post()");
+                }
+
+                $created[] = [
+                    'bitrix_user_id' => $bitrixUserId,
+                    'name' => $name,
+                    'hours' => $planHours,
+                    'number' => (string)($document['Number'] ?? ''),
+                    'ref_key' => (string)($document['Ref_Key'] ?? ''),
+                    'posted' => UNF_TIME_POST_DOCUMENTS,
+                ];
+            } catch (Throwable $e) {
+                $errors[] = [
+                    'bitrix_user_id' => $bitrixUserId,
+                    'name' => $name,
+                    'hours' => $planHours,
+                    'error' => $e->getMessage(),
+                ];
+            }
+        }
+    }
+
+    return [
+        'ok' => $errors === [],
+        'period' => $period,
+        'month_title' => (string)($report['month_title'] ?? $period),
+        'source' => [
+            'rows' => count($rows),
+            'total_hours' => round((float)($report['total_hours'] ?? 0), 2),
+        ],
+        'unf_period' => [
+            'date' => unfOdataDate($documentDate),
+            'date_from' => unfOdataDate($dateFrom),
+            'date_to' => unfOdataDate($dateTo),
+        ],
+        'created' => $created,
+        'skipped' => $skipped,
+        'errors' => $errors,
+    ];
 }

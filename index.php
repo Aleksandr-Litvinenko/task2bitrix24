@@ -88,9 +88,16 @@ require __DIR__ . '/partials/head.php';
 
         <div class="unf-action">
             <button id="createUnfTimeButton" class="secondary-action" type="button">
-                <span>Создать учёты времени в нашей рабочей УНФ</span>
+                <span>создать Учеты времени в нашей РАБОЧЕЙ унф</span>
             </button>
             <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
+        </div>
+
+        <div class="unf-action">
+            <button id="createUnfWorkOrderButton" class="secondary-action" type="button">
+                <span>создать Задания на работу в нашей РАБОЧЕЙ унф</span>
+            </button>
+            <p id="workOrderActionStatus" class="action-status" role="status" aria-live="polite"></p>
         </div>
     </section>
 
@@ -116,6 +123,8 @@ require __DIR__ . '/partials/head.php';
         var closedToValue = document.getElementById('closedToValue');
         var createUnfTimeButton = document.getElementById('createUnfTimeButton');
         var unfActionStatus = document.getElementById('unfActionStatus');
+        var createUnfWorkOrderButton = document.getElementById('createUnfWorkOrderButton');
+        var workOrderActionStatus = document.getElementById('workOrderActionStatus');
         var monthNames = [
             'Январь',
             'Февраль',
@@ -175,13 +184,13 @@ require __DIR__ . '/partials/head.php';
             }
         }
 
-        function setUnfStatus(message, state) {
-            if (!unfActionStatus) {
+        function setActionStatus(statusElement, message, state) {
+            if (!statusElement) {
                 return;
             }
 
-            unfActionStatus.textContent = message;
-            unfActionStatus.dataset.state = state || '';
+            statusElement.textContent = message;
+            statusElement.dataset.state = state || '';
         }
 
         function summarizeUnfResult(result) {
@@ -211,56 +220,59 @@ require __DIR__ . '/partials/head.php';
             return lines.join('\n');
         }
 
-        function createUnfTimeDocuments() {
-            if (!createUnfTimeButton) {
+        function bindUnfAction(button, statusElement, endpoint, pendingMessage) {
+            if (!button) {
                 return;
             }
 
-            createUnfTimeButton.disabled = true;
-            setUnfStatus('Создаю документы в УНФ...', 'pending');
+            button.addEventListener('click', function () {
+                button.disabled = true;
+                setActionStatus(statusElement, pendingMessage, 'pending');
 
-            fetch('unf_time.php', {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-                },
-                body: new URLSearchParams({
-                    period: periodInput.value
-                })
-            }).then(function (response) {
-                return response.text().then(function (text) {
-                    var data = {};
-                    try {
-                        data = text ? JSON.parse(text) : {};
-                    } catch (error) {
-                        throw new Error('УНФ вернула некорректный ответ.');
-                    }
+                fetch(endpoint, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                    },
+                    body: new URLSearchParams({
+                        period: periodInput.value
+                    })
+                }).then(function (response) {
+                    return response.text().then(function (text) {
+                        var data = {};
+                        try {
+                            data = text ? JSON.parse(text) : {};
+                        } catch (error) {
+                            throw new Error('УНФ вернула некорректный ответ.');
+                        }
 
-                    if (!response.ok && data.error) {
-                        throw new Error(data.error);
-                    }
+                        if (!response.ok && data.error) {
+                            throw new Error(data.error);
+                        }
 
-                    if (!response.ok) {
-                        throw new Error('Запрос завершился с HTTP ' + response.status + '.');
-                    }
+                        if (!response.ok) {
+                            throw new Error('Запрос завершился с HTTP ' + response.status + '.');
+                        }
 
-                    return data;
+                        return data;
+                    });
+                }).then(function (data) {
+                    var errors = Array.isArray(data.errors) ? data.errors : [];
+                    setActionStatus(statusElement, summarizeUnfResult(data), errors.length > 0 ? 'error' : 'success');
+                }).catch(function (error) {
+                    setActionStatus(statusElement, error.message, 'error');
+                }).finally(function () {
+                    button.disabled = false;
                 });
-            }).then(function (data) {
-                var errors = Array.isArray(data.errors) ? data.errors : [];
-                setUnfStatus(summarizeUnfResult(data), errors.length > 0 ? 'error' : 'success');
-            }).catch(function (error) {
-                setUnfStatus(error.message, 'error');
-            }).finally(function () {
-                createUnfTimeButton.disabled = false;
             });
         }
 
         periodMonth.addEventListener('change', syncPeriodFromSelects);
         periodYear.addEventListener('change', syncPeriodFromSelects);
-        createUnfTimeButton.addEventListener('click', createUnfTimeDocuments);
+        bindUnfAction(createUnfTimeButton, unfActionStatus, 'unf_time.php', 'Создаю учёты времени в УНФ...');
+        bindUnfAction(createUnfWorkOrderButton, workOrderActionStatus, 'unf_workorder.php', 'Создаю задания на работу в УНФ...');
     }());
 </script>
 <?php require __DIR__ . '/partials/foot.php'; ?>

@@ -82,8 +82,12 @@ require __DIR__ . '/partials/head.php';
         <?php if (!empty($availablePeriods)): ?>
             <div class="period-chips" aria-label="Месяцы с данными">
                 <?php foreach ($availablePeriods as $availablePeriod): ?>
+                    <?php
+                    $chipMonth = DateTimeImmutable::createFromFormat('!Y-m-d', $availablePeriod . '-01');
+                    $chipLabel = $chipMonth ? russianMonthTitle($chipMonth) : $availablePeriod;
+                    ?>
                     <a class="period-chip<?= $availablePeriod === $period ? ' is-active' : '' ?>"
-                       href="dashboard.php?period=<?= h(rawurlencode($availablePeriod)) ?>"><?= h($availablePeriod) ?></a>
+                       href="dashboard.php?period=<?= h(rawurlencode($availablePeriod)) ?>"><?= h($chipLabel) ?></a>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>

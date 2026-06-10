@@ -1836,6 +1836,7 @@ function buildProjectBoard(string $mode, string $period): array
     $responsibleIds = [];
     $companyIds = [];
     $groupIds = [];
+    $projectNames = [];
 
     foreach ($tasks as $task) {
         $responsibleId = (int)($task['responsibleId'] ?? $task['RESPONSIBLE_ID'] ?? 0);
@@ -1851,12 +1852,26 @@ function buildProjectBoard(string $mode, string $period): array
         $groupId = (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0);
         if ($groupId > 0) {
             $groupIds[] = $groupId;
+
+            // tasks.task.list отдаёт объект group с названием — используем его,
+            // не требуя у вебхука прав на sonet_group.get.
+            $group = $task['group'] ?? null;
+            if (is_array($group)) {
+                $groupName = trim((string)($group['name'] ?? $group['NAME'] ?? ''));
+                if ($groupName !== '') {
+                    $projectNames[$groupId] = $groupName;
+                }
+            }
         }
     }
 
     $userNames = fetchUserNamesBulk($responsibleIds);
     $companyNames = fetchCompanyNamesBulk($companyIds);
-    $projectNames = fetchProjectNamesBulk($groupIds);
+
+    $unnamedGroupIds = array_values(array_diff(array_unique($groupIds), array_keys($projectNames)));
+    if (!empty($unnamedGroupIds)) {
+        $projectNames += fetchProjectNamesBulk($unnamedGroupIds);
+    }
 
     $projects = [];
     foreach ($tasks as $task) {
