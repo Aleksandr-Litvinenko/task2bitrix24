@@ -35,7 +35,7 @@ $pageTitle = 'Закрытые часы';
 $navActive = 'main';
 require __DIR__ . '/partials/head.php';
 ?>
-    <section class="panel">
+    <section class="panel page-panel page-panel--with-extra">
         <div class="panel-grid" aria-hidden="true"></div>
         <div class="heading">
             <div>

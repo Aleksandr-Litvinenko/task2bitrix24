@@ -48,10 +48,9 @@ $medals = [1 => 'gold', 2 => 'silver', 3 => 'bronze'];
 
 $pageTitle = 'Дашборд — taskCRM';
 $navActive = 'dashboard';
-$shellClass = 'shell--wide';
 require __DIR__ . '/partials/head.php';
 ?>
-    <section class="panel dashboard-panel">
+    <section class="panel dashboard-panel page-panel">
         <div class="panel-grid" aria-hidden="true"></div>
         <div class="heading">
             <div>
