@@ -65,9 +65,15 @@ require __DIR__ . '/partials/head.php';
                         <?php endfor; ?>
                     </select>
                 </div>
-                <button type="submit">
-                    <span>Скачать Excel</span>
-                </button>
+                <?php if (userCan('excel')): ?>
+                    <button type="submit">
+                        <span>Скачать Excel</span>
+                    </button>
+                <?php else: ?>
+                    <button type="button" disabled title="Недоступно для вашей роли">
+                        <span>Скачать Excel</span>
+                    </button>
+                <?php endif; ?>
             </div>
         </form>
 
@@ -86,19 +92,21 @@ require __DIR__ . '/partials/head.php';
             </div>
         </dl>
 
-        <div class="unf-action">
-            <button id="createUnfTimeButton" class="secondary-action" type="button">
-                <span>создать "Учеты времени" в БОЕВОЙ УНФ</span>
-            </button>
-            <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
-        </div>
+        <?php if (userCan('unf')): ?>
+            <div class="unf-action">
+                <button id="createUnfTimeButton" class="secondary-action" type="button">
+                    <span>создать "Учеты времени" в БОЕВОЙ УНФ</span>
+                </button>
+                <p id="unfActionStatus" class="action-status" role="status" aria-live="polite"></p>
+            </div>
 
-        <div class="unf-action">
-            <button id="createUnfWorkOrderButton" class="secondary-action" type="button">
-                <span>создать "Задания на работу" в БОЕВОЙ УНФ</span>
-            </button>
-            <p id="workOrderActionStatus" class="action-status" role="status" aria-live="polite"></p>
-        </div>
+            <div class="unf-action">
+                <button id="createUnfWorkOrderButton" class="secondary-action" type="button">
+                    <span>создать "Задания на работу" в БОЕВОЙ УНФ</span>
+                </button>
+                <p id="workOrderActionStatus" class="action-status" role="status" aria-live="polite"></p>
+            </div>
+        <?php endif; ?>
     </section>
 
     <section class="panel quick-panel" aria-labelledby="quickLinksTitle">
@@ -109,6 +117,9 @@ require __DIR__ . '/partials/head.php';
                 <a href="https://task.kodar-msk.ru/" target="_blank" rel="noopener noreferrer">Наш таск</a>
                 <a href="https://nalog1c.bitrix24.ru/" target="_blank" rel="noopener noreferrer">Наш битрикс</a>
                 <a href="https://1cfresh.com/a/sbm/767684" target="_blank" rel="noopener noreferrer">Наша УНФ</a>
+                <?php if (userCan('admin')): ?>
+                    <a href="admin.php" class="quick-link-admin">Администрирование</a>
+                <?php endif; ?>
             </div>
         </div>
     </section>

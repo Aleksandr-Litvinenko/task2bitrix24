@@ -6,6 +6,10 @@ require_once __DIR__ . '/lib.php';
 
 requireAuth();
 
+if (!userCan('refresh')) {
+    denyJson('Обновление дашборда недоступно для вашей роли.');
+}
+
 header('Content-Type: application/json; charset=utf-8');
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {

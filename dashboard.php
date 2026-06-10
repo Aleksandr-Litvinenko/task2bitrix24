@@ -31,6 +31,16 @@ $lastYear = max((int)date('Y') + 1, $selectedYear);
 $snapshot = loadDashboardSnapshot($period);
 $employees = is_array($snapshot['employees'] ?? null) ? $snapshot['employees'] : [];
 
+// Роль "Внешний": имена, фото и цифры зашифрованы, структура рейтинга видна.
+$maskedView = isMaskedView();
+if ($maskedView) {
+    foreach ($employees as &$maskedEmployee) {
+        $maskedEmployee['name'] = maskValue($maskedEmployee['name'] ?? '');
+        $maskedEmployee['photo'] = '';
+    }
+    unset($maskedEmployee);
+}
+
 $maxHours = 0.0;
 foreach ($employees as $employee) {
     $maxHours = max($maxHours, (float)($employee['hours'] ?? 0));
@@ -73,9 +83,11 @@ require __DIR__ . '/partials/head.php';
                     <?php endfor; ?>
                 </select>
             </div>
-            <button id="dashRefresh" class="secondary-action" type="button" data-period="<?= h($period) ?>">
-                <span>Обновить за этот месяц</span>
-            </button>
+            <?php if (userCan('refresh')): ?>
+                <button id="dashRefresh" class="secondary-action" type="button" data-period="<?= h($period) ?>">
+                    <span>Обновить за этот месяц</span>
+                </button>
+            <?php endif; ?>
             <p id="dashStatus" class="action-status" role="status" aria-live="polite"></p>
         </div>
 
@@ -101,7 +113,7 @@ require __DIR__ . '/partials/head.php';
             <div class="dash-summary">
                 <div>
                     <dt>Всего часов</dt>
-                    <dd><?= h(number_format((float)($snapshot['total_hours'] ?? 0), 2, '.', ' ')) ?></dd>
+                    <dd><?= $maskedView ? h(maskNumber()) : h(number_format((float)($snapshot['total_hours'] ?? 0), 2, '.', ' ')) ?></dd>
                 </div>
                 <div>
                     <dt>Сотрудников</dt>
@@ -109,7 +121,7 @@ require __DIR__ . '/partials/head.php';
                 </div>
                 <div>
                     <dt>Задач закрыто</dt>
-                    <dd><?= (int)($snapshot['tasks_matched'] ?? 0) ?></dd>
+                    <dd><?= $maskedView ? h(maskNumber()) : (int)($snapshot['tasks_matched'] ?? 0) ?></dd>
                 </div>
                 <div>
                     <dt>Обновлено</dt>
@@ -144,10 +156,10 @@ require __DIR__ . '/partials/head.php';
                         <div class="leader-body">
                             <div class="leader-line">
                                 <span class="leader-name"><?= h((string)($employee['name'] ?? '-')) ?></span>
-                                <span class="leader-hours"><?= h(number_format($hours, 2, '.', ' ')) ?> ч</span>
+                                <span class="leader-hours"><?= $maskedView ? h(maskNumber()) : h(number_format($hours, 2, '.', ' ')) . ' ч' ?></span>
                             </div>
                             <div class="leader-bar"><span style="width: <?= $barWidth ?>%"></span></div>
-                            <div class="leader-sub"><?= (int)($employee['tasks_count'] ?? 0) ?> задач(и)</div>
+                            <div class="leader-sub"><?= $maskedView ? h(maskNumber()) : (int)($employee['tasks_count'] ?? 0) . ' задач(и)' ?></div>
                         </div>
                     </li>
                 <?php endforeach; ?>

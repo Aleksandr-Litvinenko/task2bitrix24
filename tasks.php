@@ -35,6 +35,23 @@ try {
     $boardError = $e->getMessage();
 }
 
+// Роль "Внешний" видит структуру доски, но данные зашифрованы.
+$maskedView = isMaskedView();
+if ($maskedView && is_array($board)) {
+    foreach ($board['projects'] as &$maskedProject) {
+        $maskedProject['name'] = maskValue($maskedProject['name']);
+        $maskedProject['url'] = '';
+        foreach ($maskedProject['tasks'] as &$maskedTask) {
+            $maskedTask['title'] = maskValue($maskedTask['title']);
+            $maskedTask['responsible'] = maskValue($maskedTask['responsible']);
+            $maskedTask['company'] = $maskedTask['company'] !== '-' ? maskValue($maskedTask['company']) : '-';
+            $maskedTask['url'] = '';
+        }
+        unset($maskedTask);
+    }
+    unset($maskedProject);
+}
+
 $pageTitle = 'Задачи — taskCRM';
 $navActive = 'tasks';
 require __DIR__ . '/partials/head.php';

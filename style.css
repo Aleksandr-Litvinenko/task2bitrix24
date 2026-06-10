@@ -419,8 +419,18 @@ button span {
 
 .quick-link-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
     gap: 12px;
+}
+
+.quick-link-grid .quick-link-admin {
+    border-color: rgba(249, 199, 79, 0.45);
+    color: #ffe9b3;
+}
+
+.quick-link-grid .quick-link-admin:hover {
+    border-color: rgba(249, 199, 79, 0.8);
+    color: #ffffff;
 }
 
 .quick-link-grid a {
@@ -1212,6 +1222,187 @@ a {
 
 .task-card.is-filtered-out {
     display: none;
+}
+
+/* Админ-панель */
+.admin-grid {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 18px;
+}
+
+.admin-card {
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 20px;
+    background: rgba(7, 14, 24, 0.7);
+}
+
+.admin-card h2 {
+    margin: 0 0 14px;
+    color: #eef5ff;
+    font-size: 20px;
+}
+
+.admin-message {
+    position: relative;
+    z-index: 1;
+    min-height: 0;
+    margin: 0 0 6px;
+    font-size: 14px;
+}
+
+.admin-users {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.admin-user {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 10px 14px;
+    background: var(--surface-strong);
+}
+
+.admin-user--empty {
+    color: var(--text-soft);
+    font-size: 13px;
+    justify-content: center;
+}
+
+.admin-user-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.admin-user-main strong {
+    color: #f3f8ff;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-user-note {
+    color: var(--text-soft);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.role-badge {
+    flex: 0 0 auto;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.role-badge--admin {
+    background: rgba(249, 199, 79, 0.16);
+    color: var(--amber);
+}
+
+.role-badge--employee {
+    background: rgba(96, 239, 255, 0.14);
+    color: var(--cyan);
+}
+
+.role-badge--external {
+    background: rgba(154, 169, 187, 0.16);
+    color: #cfe0f0;
+}
+
+.admin-inline-form {
+    margin: 0;
+}
+
+.admin-delete {
+    min-width: 0;
+    min-height: 36px;
+    border: 1px solid rgba(255, 141, 141, 0.4);
+    border-radius: 8px;
+    padding: 4px 14px;
+    color: #ff8d8d;
+    font-size: 12px;
+    font-weight: 800;
+    background: rgba(255, 141, 141, 0.07);
+    box-shadow: none;
+}
+
+.admin-delete::before {
+    content: none;
+}
+
+.admin-delete:hover {
+    background: rgba(255, 141, 141, 0.16);
+    box-shadow: none;
+}
+
+.admin-form {
+    display: grid;
+    gap: 10px;
+}
+
+.admin-form label {
+    font-size: 14px;
+}
+
+.admin-form input,
+.admin-form select {
+    min-height: 48px;
+}
+
+.admin-form button {
+    min-width: 0;
+    margin-top: 4px;
+}
+
+.admin-hint {
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.admin-roles-help {
+    margin-top: 18px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+}
+
+.admin-roles-help h3 {
+    margin: 0 0 8px;
+    color: #eef5ff;
+    font-size: 14px;
+}
+
+.admin-roles-help p {
+    margin: 4px 0;
+    color: var(--text-soft);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.admin-roles-help strong {
+    color: #dce8f5;
+}
+
+@media (max-width: 900px) {
+    .admin-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* Мини-игра: таблица лидеров кликов (правый верхний угол, на фоне) */
