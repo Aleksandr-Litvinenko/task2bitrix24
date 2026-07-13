@@ -29,10 +29,25 @@ function bitrixRequest(string $method, array $data = [], int $attempt = 0): arra
             CURLOPT_CONNECTTIMEOUT => 20,
             CURLOPT_TIMEOUT => 120,
         ]);
+        // Перемешиваем A-записи: у bitrix24.ru их много и отдельные IP
+        // бывают недоступны — без шаффла curl каждый раз бьётся в один и тот же.
+        if (defined('CURLOPT_DNS_SHUFFLE_ADDRESSES')) {
+            curl_setopt($curl, CURLOPT_DNS_SHUFFLE_ADDRESSES, true);
+        }
         $response = curl_exec($curl);
         $error = curl_error($curl);
+        $errno = curl_errno($curl);
 
         if ($response === false) {
+            // У bitrix24.ru несколько A-записей, и часть IP может не отвечать.
+            // Сетевые ошибки (DNS, connect, timeout, SSL) ретраим: новый хэндл
+            // заново резолвит адрес и с большой вероятностью попадает на живой.
+            $networkErrors = [6, 7, 28, 35]; // CURLE_COULDNT_RESOLVE_HOST, COULDNT_CONNECT, OPERATION_TIMEDOUT, SSL_CONNECT_ERROR
+            if (in_array($errno, $networkErrors, true) && $attempt < 3) {
+                sleep(1);
+                return bitrixRequest($method, $data, $attempt + 1);
+            }
+
             throw new RuntimeException('Ошибка запроса к Битрикс: ' . $error);
         }
     } else {
@@ -234,14 +249,12 @@ function fetchUsersPage(array $filter): array
 
 function fetchActiveUsers(): array
 {
+    // Фильтрованная пагинация user.get на портале работает ненадёжно,
+    // поэтому забираем всех и отбираем сотрудников на своей стороне.
     try {
-        $users = fetchUsersPage(['ACTIVE' => true]);
+        $users = fetchUsersPage([]);
     } catch (Throwable $e) {
         $users = [];
-    }
-
-    if (empty($users)) {
-        $users = fetchUsersPage([]);
     }
 
     $result = [];
@@ -285,6 +298,29 @@ function fetchReportUsers(): array
     return $result;
 }
 
+function reportUserIds(): array
+{
+    static $ids = null;
+
+    if ($ids !== null) {
+        return $ids;
+    }
+
+    // Закреплённый список из конфигурации + все активные сотрудники портала:
+    // новые люди в Битриксе подхватываются автоматически, без правки конфига.
+    $dynamicIds = [];
+    try {
+        $dynamicIds = array_map('intval', array_keys(fetchActiveUsers()));
+    } catch (Throwable $e) {
+        $dynamicIds = [];
+    }
+
+    $ids = array_values(array_unique(array_merge(array_map('intval', REPORT_USER_IDS), $dynamicIds)));
+    sort($ids);
+
+    return $ids;
+}
+
 function isReportEmployee(array $user): bool
 {
     if (isset($user['ACTIVE']) && !in_array($user['ACTIVE'], [true, 'Y', '1', 1], true)) {
@@ -314,9 +350,16 @@ function getUserName(int $id): string
         return $cache[$id];
     }
 
-    $response = bitrixRequest('user.get', ['id' => $id]);
-    $user = $response['result'][0] ?? [];
-    $cache[$id] = is_array($user) ? userDisplayName($user) : (string)$id;
+    try {
+        $response = bitrixRequest('user.get', ['id' => $id]);
+        $user = $response['result'][0] ?? [];
+        $name = is_array($user) ? userDisplayName($user) : '-';
+    } catch (Throwable $e) {
+        $name = '-';
+    }
+
+    // Неизвестный или недоступный пользователь не должен ронять отчёт.
+    $cache[$id] = $name !== '-' ? $name : 'Сотрудник #' . $id;
 
     return $cache[$id];
 }
@@ -777,17 +820,17 @@ function fetchTaskElapsedItems(int $taskId, array $userIds): array
     $items = [];
     $page = 1;
     $pageSize = 50;
+    // Пустой список пользователей = без фильтра: берём все списания по задаче,
+    // чтобы новые сотрудники Битрикс попадали в отчёт автоматически.
     $userIds = array_values(array_filter(array_map('intval', $userIds)));
 
-    if (empty($userIds)) {
-        return [];
-    }
-
     while ($page < 1000) {
-        $response = bitrixRequest('task.elapseditem.getlist', [
+        // FILTER обязателен (параметры метода позиционные); пустой список
+        // пользователей заменяем всегда-истинным условием >ID 0 = "все".
+        $requestData = [
             'TASKID' => $taskId,
             'ORDER' => ['ID' => 'asc'],
-            'FILTER' => ['USER_ID' => $userIds],
+            'FILTER' => !empty($userIds) ? ['USER_ID' => $userIds] : ['>ID' => 0],
             'SELECT' => ['ID', 'TASK_ID', 'USER_ID', 'MINUTES', 'COMMENT_TEXT'],
             'PARAMS' => [
                 'NAV_PARAMS' => [
@@ -795,7 +838,9 @@ function fetchTaskElapsedItems(int $taskId, array $userIds): array
                     'iNumPage' => $page,
                 ],
             ],
-        ]);
+        ];
+
+        $response = bitrixRequest('task.elapseditem.getlist', $requestData);
 
         $pageItems = $response['result'] ?? [];
         if (!is_array($pageItems) || empty($pageItems)) {
@@ -817,18 +862,20 @@ function fetchTaskElapsedItems(int $taskId, array $userIds): array
 function fetchTaskElapsedItemsBulk(array $taskIds, array $userIds): array
 {
     $taskIds = array_values(array_unique(array_filter(array_map('intval', $taskIds))));
+    // Пустой список пользователей = без фильтра (все, кто списывал время).
     $userIds = array_values(array_filter(array_map('intval', $userIds)));
 
-    if (empty($taskIds) || empty($userIds)) {
+    if (empty($taskIds)) {
         return [];
     }
 
     $commands = [];
     foreach ($taskIds as $taskId) {
-        $commands['e' . $taskId] = bitrixCommand('task.elapseditem.getlist', [
+        // FILTER обязателен (параметры метода позиционные); ">ID 0" = все записи.
+        $commandData = [
             'TASKID' => $taskId,
             'ORDER' => ['ID' => 'asc'],
-            'FILTER' => ['USER_ID' => $userIds],
+            'FILTER' => !empty($userIds) ? ['USER_ID' => $userIds] : ['>ID' => 0],
             'SELECT' => ['ID', 'TASK_ID', 'USER_ID', 'MINUTES', 'COMMENT_TEXT'],
             'PARAMS' => [
                 'NAV_PARAMS' => [
@@ -836,7 +883,9 @@ function fetchTaskElapsedItemsBulk(array $taskIds, array $userIds): array
                     'iNumPage' => 1,
                 ],
             ],
-        ]);
+        ];
+
+        $commands['e' . $taskId] = bitrixCommand('task.elapseditem.getlist', $commandData);
     }
 
     $batch = bitrixBatchAll($commands);
@@ -916,7 +965,9 @@ function buildClosedHoursReport(string $period): array
     }
     $companyNames = fetchCompanyNamesBulk($companyIds);
 
-    $elapsedItemsByTask = fetchTaskElapsedItemsBulk($matchedTaskIds, array_keys($rows));
+    // Без фильтра по пользователям: в отчёт попадает каждый, кто списал время
+    // на подходящую задачу, включая сотрудников, добавленных в Битрикс недавно.
+    $elapsedItemsByTask = fetchTaskElapsedItemsBulk($matchedTaskIds, []);
     $allTaskRows = [];
     $matchedTasks = [];
 
@@ -1838,7 +1889,8 @@ function buildProjectBoard(string $mode, string $period): array
 
     $statuses = $mode === 'closed' ? BOARD_CLOSED_STATUSES : BOARD_ACTIVE_STATUSES;
     $filter = [
-        'RESPONSIBLE_ID' => array_values(REPORT_USER_IDS),
+        // Закреплённые ID + активные сотрудники портала: новички видны сразу.
+        'RESPONSIBLE_ID' => reportUserIds(),
         'REAL_STATUS' => $statuses,
     ];
 
