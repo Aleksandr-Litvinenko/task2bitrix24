@@ -35,6 +35,12 @@ cp config.local.example.php config.local.php
 
 Заполните `LOCAL_BITRIX_WEBHOOK`, `LOCAL_APP_AUTH_PASSWORD` и, если нужна кнопка УНФ, `LOCAL_UNF_ODATA_USER` / `LOCAL_UNF_ODATA_PASSWORD`.
 
+Проверить, что всё настроено (ничего не меняет, только читает):
+
+```sh
+php tools/preflight.php
+```
+
 Из папки проекта:
 
 ```sh
