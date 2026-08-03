@@ -28,7 +28,8 @@ $navItems = [
     ['key' => 'main', 'label' => 'Главная', 'href' => 'index.php' . $navQuery, 'external' => false],
     ['key' => 'tasks', 'label' => 'Задачи', 'href' => 'tasks.php' . $navQuery, 'external' => false],
     ['key' => 'dashboard', 'label' => 'Дашборд', 'href' => 'dashboard.php' . $navQuery, 'external' => false],
-    ['key' => 'wantsame', 'label' => 'ХОЧУ ТАКЖЕ', 'href' => 'want.php' . $navQuery, 'external' => false],
+    ['key' => 'quality', 'label' => 'Проверка задач', 'href' => 'quality.php' . $navQuery, 'external' => false],
+    ['key' => 'kpi', 'label' => 'KPI по задачам', 'href' => 'kpi.php' . $navQuery, 'external' => false],
 ];
 
 $gameUserLogin = trim((string)($_SERVER['PHP_AUTH_USER'] ?? ''));
@@ -46,16 +47,14 @@ if ($gameUserLogin === '') {
     <script>window.CC_USER = <?= json_encode($gameUserLogin, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;</script>
 </head>
 <body>
-<div class="ambient-glow" aria-hidden="true"></div>
 <canvas id="cursorTrail" aria-hidden="true"></canvas>
 <main class="shell<?= $shellClass !== '' ? ' ' . h($shellClass) : '' ?>">
     <nav class="topnav panel" aria-label="Основная навигация">
-        <div class="panel-grid" aria-hidden="true"></div>
         <div class="topnav-inner">
             <?php foreach ($navItems as $item): ?>
                 <?php $isActive = !$item['external'] && $item['key'] === $navActive; ?>
                 <a
-                    class="navbtn<?= $isActive ? ' is-active' : '' ?><?= $item['key'] === 'wantsame' ? ' navbtn-accent' : '' ?>"
+                    class="navbtn<?= $isActive ? ' is-active' : '' ?>"
                     href="<?= h($item['href']) ?>"
                     <?= $isActive ? 'aria-current="page"' : '' ?>
                     <?= $item['external'] ? 'target="_blank" rel="noopener noreferrer"' : '' ?>

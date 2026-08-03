@@ -57,7 +57,6 @@ $navActive = 'tasks';
 require __DIR__ . '/partials/head.php';
 ?>
     <section class="panel board-panel page-panel">
-        <div class="panel-grid" aria-hidden="true"></div>
         <div class="heading">
             <div>
                 <p class="eyebrow">Bitrix24 / Доска</p>

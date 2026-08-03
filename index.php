@@ -36,7 +36,6 @@ $navActive = 'main';
 require __DIR__ . '/partials/head.php';
 ?>
     <section class="panel page-panel page-panel--with-extra">
-        <div class="panel-grid" aria-hidden="true"></div>
         <div class="heading">
             <div>
                 <p class="eyebrow">Bitrix24 / XLSX</p>
@@ -92,13 +91,6 @@ require __DIR__ . '/partials/head.php';
             </div>
         </dl>
 
-        <div class="unf-action">
-            <a class="secondary-action quality-action" href="quality.php?period=<?= h(rawurlencode($period)) ?>">
-                <span>Проверка корректности заполнения задач</span>
-            </a>
-            <p class="action-hint">Найдёт задачи без часов, без результата, без CRM и проекта — и выгрузит их в Excel.</p>
-        </div>
-
         <?php if (userCan('unf')): ?>
             <div class="unf-action">
                 <button id="createUnfTimeButton" class="secondary-action" type="button">
@@ -117,7 +109,6 @@ require __DIR__ . '/partials/head.php';
     </section>
 
     <section class="panel quick-panel" aria-labelledby="quickLinksTitle">
-        <div class="panel-grid" aria-hidden="true"></div>
         <div class="quick-links">
             <h2 id="quickLinksTitle">Полезные кнопки</h2>
             <?php

@@ -11,7 +11,7 @@ if (!userCan('admin')) {
     $pageTitle = 'Нет доступа — taskCRM';
     $navActive = '';
     require __DIR__ . '/partials/head.php';
-    echo '<section class="panel page-panel"><div class="panel-grid" aria-hidden="true"></div>';
+    echo '<section class="panel page-panel">';
     echo '<div class="heading"><div><p class="eyebrow">taskCRM / Доступ</p><h1>Нет доступа</h1></div></div>';
     echo '<p class="board-hint">Администрирование доступно только роли «Администратор».</p>';
     echo '</section>';
@@ -90,7 +90,6 @@ $navActive = '';
 require __DIR__ . '/partials/head.php';
 ?>
     <section class="panel page-panel">
-        <div class="panel-grid" aria-hidden="true"></div>
         <div class="heading">
             <div>
                 <p class="eyebrow">taskCRM / Доступ</p>

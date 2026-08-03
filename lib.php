@@ -2420,6 +2420,383 @@ function buildTaskQualityReport(string $period): array
     ];
 }
 
+/* =====================================================================
+ * KPI по созданным задачам
+ * ===================================================================== */
+
+function kpiTaskTags(array $task): array
+{
+    $tags = $task['tags'] ?? $task['TAGS'] ?? [];
+    if (is_string($tags)) {
+        $tags = [$tags];
+    }
+    if (!is_array($tags)) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($tags as $tag) {
+        if (is_array($tag)) {
+            $tag = $tag['name'] ?? $tag['title'] ?? '';
+        }
+        $tag = trim((string)$tag);
+        if ($tag !== '') {
+            $result[] = $tag;
+        }
+    }
+
+    return $result;
+}
+
+function kpiMoney(float $value): float
+{
+    return round($value, 2);
+}
+
+function buildKpiReport(string $period): array
+{
+    set_time_limit(900);
+
+    [$monthStart] = monthPeriod($period);
+    $monthEnd = $monthStart->modify('last day of this month')->setTime(23, 59, 59);
+
+    // Задачи, созданные в выбранном месяце и уже закрытые.
+    $tasks = fetchAllTasks([
+        '>=CREATED_DATE' => $monthStart->format('Y-m-d H:i:s'),
+        '<=CREATED_DATE' => $monthEnd->format('Y-m-d H:i:s'),
+        'REAL_STATUS' => REPORT_TASK_STATUSES,
+    ], [
+        'ID',
+        'TITLE',
+        'CREATED_BY',
+        'CREATED_DATE',
+        'CLOSED_DATE',
+        'DEADLINE',
+        'DESCRIPTION',
+        'TAGS',
+        'GROUP_ID',
+        'RESPONSIBLE_ID',
+    ]);
+
+    $taskIds = [];
+    $creatorIds = [];
+    foreach ($tasks as $task) {
+        $taskId = (int)($task['id'] ?? $task['ID'] ?? 0);
+        if ($taskId > 0) {
+            $taskIds[] = $taskId;
+        }
+        $creatorId = (int)($task['createdBy'] ?? $task['CREATED_BY'] ?? 0);
+        if ($creatorId > 0) {
+            $creatorIds[] = $creatorId;
+        }
+    }
+
+    $elapsedByTask = fetchTaskElapsedItemsBulk($taskIds, []);
+    $creatorNames = fetchUserNamesBulk($creatorIds);
+
+    $people = [];
+    $rows = [];
+
+    foreach ($tasks as $task) {
+        $taskId = (int)($task['id'] ?? $task['ID'] ?? 0);
+        if ($taskId <= 0) {
+            continue;
+        }
+
+        $creatorId = (int)($task['createdBy'] ?? $task['CREATED_BY'] ?? 0);
+        $creatorName = $creatorId > 0 ? ($creatorNames[$creatorId] ?? getUserName($creatorId)) : '—';
+
+        $minutes = 0;
+        foreach ($elapsedByTask[$taskId] ?? [] as $item) {
+            $minutes += (int)($item['MINUTES'] ?? 0);
+        }
+        $hours = round($minutes / 60, 2);
+
+        $deadlineRaw = (string)($task['deadline'] ?? $task['DEADLINE'] ?? '');
+        $closedRaw = (string)($task['closedDate'] ?? $task['CLOSED_DATE'] ?? '');
+        $deadlineTs = $deadlineRaw !== '' ? (int)(strtotime($deadlineRaw) ?: 0) : 0;
+        $closedTs = $closedRaw !== '' ? (int)(strtotime($closedRaw) ?: 0) : 0;
+
+        // Просрочка: закрыта позже крайнего срока. Без срока — не просрочена.
+        $overdueByDate = $deadlineTs > 0 && $closedTs > 0 && $closedTs > $deadlineTs;
+
+        $tags = kpiTaskTags($task);
+        $overdueByTag = false;
+        foreach ($tags as $tag) {
+            if (mb_stripos($tag, KPI_OVERDUE_TAG) !== false) {
+                $overdueByTag = true;
+                break;
+            }
+        }
+
+        $description = (string)($task['description'] ?? $task['DESCRIPTION'] ?? '');
+        $byTemplate = KPI_TEMPLATE_MARKER !== '' && mb_stripos($description, KPI_TEMPLATE_MARKER) !== false;
+
+        if (!isset($people[$creatorId])) {
+            $people[$creatorId] = [
+                'id' => $creatorId,
+                'name' => $creatorName,
+                'tasks_total' => 0,
+                'no_hours' => 0,
+                'overdue_dates' => 0,
+                'overdue_tags' => 0,
+                'template_total' => 0,
+                'hours' => 0.0,
+            ];
+        }
+
+        $people[$creatorId]['tasks_total']++;
+        $people[$creatorId]['hours'] += $hours;
+        if ($minutes <= 0) {
+            $people[$creatorId]['no_hours']++;
+        }
+        if ($overdueByDate) {
+            $people[$creatorId]['overdue_dates']++;
+        }
+        if ($overdueByTag) {
+            $people[$creatorId]['overdue_tags']++;
+        }
+        if ($byTemplate) {
+            $people[$creatorId]['template_total']++;
+        }
+
+        $rows[] = [
+            'task_id' => $taskId,
+            'title' => trim((string)($task['title'] ?? $task['TITLE'] ?? '')) ?: ('Задача #' . $taskId),
+            'url' => bitrixTaskUrl($taskId, (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0)),
+            'creator_id' => $creatorId,
+            'creator' => $creatorName,
+            'created_date' => formatTaskDateValue($task['createdDate'] ?? $task['CREATED_DATE'] ?? ''),
+            'closed_date' => formatTaskDateValue($closedRaw),
+            'deadline' => $deadlineTs > 0 ? formatTaskDateValue($deadlineRaw) : '',
+            'hours' => $hours,
+            'overdue_date' => $overdueByDate,
+            'overdue_tag' => $overdueByTag,
+            'by_template' => $byTemplate,
+        ];
+    }
+
+    foreach ($people as &$person) {
+        // Зачётные задачи: без списанных часов в расчёт не идут.
+        $counted = max(0, $person['tasks_total'] - $person['no_hours']);
+        $overdue = $person['overdue_dates'] + $person['overdue_tags'];
+        // Как в рабочем файле: из «по шаблону» вычитаются задачи без часов.
+        $template = max(0, $person['template_total'] - $person['no_hours']);
+
+        $person['counted'] = $counted;
+        $person['overdue'] = $overdue;
+        $person['template'] = $template;
+        $person['in_time'] = max(0, $counted - $overdue);
+        $person['hours'] = round($person['hours'], 2);
+
+        $person['in_time_share'] = $counted > 0 ? $person['in_time'] / $counted : 0.0;
+        $person['template_share'] = $counted > 0 ? min(1.0, $template / $counted) : 0.0;
+
+        $person['kpi1'] = kpiMoney($counted / max(1, KPI_TASKS_BASE) * KPI_TASKS_RATE);
+        $person['kpi2'] = kpiMoney($person['in_time_share'] * KPI_OVERDUE_RATE);
+        $person['kpi3'] = kpiMoney($person['template_share'] * KPI_TEMPLATE_RATE);
+        $person['kpi_total'] = kpiMoney($person['kpi1'] + $person['kpi2'] + $person['kpi3']);
+    }
+    unset($person);
+
+    // Сотрудники без зачётных задач вниз, остальные — по сумме KPI.
+    uasort($people, static function (array $left, array $right): int {
+        return [$right['counted'] > 0, $right['kpi_total']] <=> [$left['counted'] > 0, $left['kpi_total']];
+    });
+
+    usort($rows, static function (array $left, array $right): int {
+        return [$left['creator'], $left['task_id']] <=> [$right['creator'], $right['task_id']];
+    });
+
+    $totals = [
+        'tasks_total' => 0,
+        'counted' => 0,
+        'overdue' => 0,
+        'template' => 0,
+        'kpi_total' => 0.0,
+    ];
+    foreach ($people as $person) {
+        $totals['tasks_total'] += $person['tasks_total'];
+        $totals['counted'] += $person['counted'];
+        $totals['overdue'] += $person['overdue'];
+        $totals['template'] += $person['template'];
+        $totals['kpi_total'] += $person['kpi_total'];
+    }
+    $totals['kpi_total'] = kpiMoney($totals['kpi_total']);
+
+    return [
+        'period' => $period,
+        'month_title' => russianMonthTitle($monthStart),
+        'people' => array_values($people),
+        'rows' => $rows,
+        'totals' => $totals,
+        'rates' => [
+            'tasks_base' => KPI_TASKS_BASE,
+            'tasks_rate' => KPI_TASKS_RATE,
+            'overdue_rate' => KPI_OVERDUE_RATE,
+            'template_rate' => KPI_TEMPLATE_RATE,
+        ],
+    ];
+}
+
+function kpiSnapshotPath(string $period): string
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        throw new InvalidArgumentException('Некорректный период KPI.');
+    }
+
+    return dashboardDataDir() . '/kpi-' . $period . '.json';
+}
+
+function saveKpiSnapshot(array $report): bool
+{
+    try {
+        $period = (string)($report['period'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+            return false;
+        }
+
+        ensureDashboardDataDir();
+        $report['checked_at'] = date('c');
+        $json = json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            return false;
+        }
+
+        $path = kpiSnapshotPath($period);
+        $tmp = $path . '.tmp';
+        if (file_put_contents($tmp, $json) === false) {
+            return false;
+        }
+
+        return rename($tmp, $path);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function loadKpiSnapshot(string $period): ?array
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        return null;
+    }
+
+    $path = kpiSnapshotPath($period);
+    if (!is_file($path)) {
+        return null;
+    }
+
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return null;
+    }
+
+    $data = json_decode($raw, true);
+
+    return is_array($data) && isset($data['people']) ? $data : null;
+}
+
+function buildKpiPeopleSheetXml(array $report): string
+{
+    $headers = [
+        'Сотрудник',
+        'Создано задач',
+        'Без часов',
+        'Зачётных',
+        'Просрочено',
+        'В срок',
+        'По шаблону',
+        'Часы',
+        'KPI 1 — задачи',
+        'KPI 2 — сроки',
+        'KPI 3 — описание',
+        'Итого',
+    ];
+    $widths = [30, 14, 12, 12, 13, 10, 13, 10, 16, 16, 18, 14];
+
+    $rows = [];
+    foreach ($report['people'] as $person) {
+        $rows[] = [
+            ['value' => (string)$person['name'], 'style' => 8],
+            ['value' => (int)$person['tasks_total'], 'style' => 9],
+            ['value' => (int)$person['no_hours'], 'style' => 9],
+            ['value' => (int)$person['counted'], 'style' => 9],
+            ['value' => (int)$person['overdue'], 'style' => 9],
+            ['value' => (int)$person['in_time'], 'style' => 9],
+            ['value' => (int)$person['template'], 'style' => 9],
+            ['value' => (float)$person['hours'], 'style' => 9],
+            ['value' => (float)$person['kpi1'], 'style' => 9],
+            ['value' => (float)$person['kpi2'], 'style' => 9],
+            ['value' => (float)$person['kpi3'], 'style' => 9],
+            ['value' => (float)$person['kpi_total'], 'style' => 9],
+        ];
+    }
+
+    return buildTableSheetXml($headers, $rows, $widths);
+}
+
+function buildKpiTasksSheetXml(array $report): string
+{
+    $headers = [
+        'Постановщик',
+        'Номер',
+        'Название',
+        'Ссылка',
+        'Дата создания',
+        'Крайний срок',
+        'Дата закрытия',
+        'Часы',
+        'Просрочена',
+        'По шаблону',
+    ];
+    $widths = [26, 10, 46, 44, 18, 18, 18, 10, 14, 14];
+
+    $rows = [];
+    foreach ($report['rows'] as $row) {
+        $overdue = $row['overdue_date'] || $row['overdue_tag'];
+        $rows[] = [
+            ['value' => (string)$row['creator'], 'style' => 8],
+            ['value' => (string)$row['task_id'], 'style' => 8],
+            ['value' => (string)$row['title'], 'style' => 8],
+            ['value' => (string)$row['url'], 'style' => 8],
+            ['value' => (string)$row['created_date'], 'style' => 8],
+            ['value' => $row['deadline'] !== '' ? (string)$row['deadline'] : '—', 'style' => 8],
+            ['value' => (string)$row['closed_date'], 'style' => 8],
+            ['value' => (float)$row['hours'], 'style' => 9],
+            ['value' => $overdue ? 'да' : 'нет', 'style' => 8],
+            ['value' => $row['by_template'] ? 'да' : 'нет', 'style' => 8],
+        ];
+    }
+
+    return buildTableSheetXml($headers, $rows, $widths);
+}
+
+function downloadKpiXlsx(array $report): void
+{
+    $usedNames = [];
+    $sheets = [
+        [
+            'name' => uniqueWorksheetName('KPI по сотрудникам', $usedNames),
+            'xml' => buildKpiPeopleSheetXml($report),
+        ],
+        [
+            'name' => uniqueWorksheetName('Задачи', $usedNames),
+            'xml' => buildKpiTasksSheetXml($report),
+        ],
+    ];
+
+    $path = createXlsxFromSheets($sheets, 'KPI по созданным задачам за ' . (string)$report['month_title']);
+    $filename = 'KPI по созданным задачам ' . $report['period'] . '.xlsx';
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header("Content-Disposition: attachment; filename=\"kpi-" . $report['period'] . ".xlsx\"; filename*=UTF-8''" . rawurlencode($filename));
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    readfile($path);
+    unlink($path);
+}
+
 function qualitySnapshotPath(string $period): string
 {
     if (!preg_match('/^\d{4}-\d{2}$/', $period)) {

@@ -76,15 +76,14 @@ $issueTitles = qualityIssueTitles();
 $issueSeverities = qualityIssueSeverities();
 
 $pageTitle = 'Проверка задач — taskCRM';
-$navActive = 'main';
+$navActive = 'quality';
 require __DIR__ . '/partials/head.php';
 ?>
     <section class="panel page-panel">
-        <div class="panel-grid" aria-hidden="true"></div>
         <div class="heading">
             <div>
                 <p class="eyebrow">Bitrix24 / Контроль</p>
-                <h1 class="quality-title">Проверка корректности заполнения задач</h1>
+                <h1 class="section-title">Проверка корректности заполнения задач</h1>
             </div>
             <span class="month-chip"><?= h($report['month_title'] ?? russianMonthTitle($monthStart)) ?></span>
         </div>
@@ -106,7 +105,7 @@ require __DIR__ . '/partials/head.php';
             <input type="hidden" name="period" id="qualityPeriod" value="<?= h($period) ?>">
             <button type="submit"><span>Проверить задачи</span></button>
             <?php if ($report !== null && !empty($report['rows']) && userCan('excel')): ?>
-                <a class="quality-export" href="quality.php?export=xlsx&amp;period=<?= h(rawurlencode($period)) ?>">
+                <a class="button-link" href="quality.php?export=xlsx&amp;period=<?= h(rawurlencode($period)) ?>">
                     <span>Скачать Excel</span>
                 </a>
             <?php endif; ?>
@@ -116,7 +115,7 @@ require __DIR__ . '/partials/head.php';
             <?php
             $checkedTs = !empty($report['checked_at']) ? strtotime((string)$report['checked_at']) : 0;
             ?>
-            <p class="board-hint quality-checked">
+            <p class="board-hint section-note">
                 <?php if ($fromCache && $checkedTs): ?>
                     Результат проверки от <?= h(date('d.m.Y H:i', $checkedTs)) ?>. Нажмите «Проверить задачи», чтобы обновить.
                 <?php else: ?>

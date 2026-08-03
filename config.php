@@ -93,6 +93,20 @@ define('BOARD_CLOSED_STATUSES', REPORT_TASK_STATUSES);
 // Лимит карточек на колонку проекта, чтобы доска не разрасталась бесконечно.
 define('BOARD_TASKS_PER_PROJECT_LIMIT', 200);
 
+// --- KPI по созданным задачам ---
+// Формулы повторяют рабочий файл «РезультатыМесяца»:
+//   KPI 1 = зачётные задачи / 100 * 30000
+//   KPI 2 = (зачётные - просроченные) / зачётные * 25000
+//   KPI 3 = задачи по шаблону / зачётные * 25000
+// Зачётные = созданные и закрытые за месяц минус задачи без списанных часов.
+define('KPI_TASKS_BASE', (int)configValue('KPI_TASKS_BASE', 'LOCAL_KPI_TASKS_BASE', '100'));
+define('KPI_TASKS_RATE', (float)configValue('KPI_TASKS_RATE', 'LOCAL_KPI_TASKS_RATE', '30000'));
+define('KPI_OVERDUE_RATE', (float)configValue('KPI_OVERDUE_RATE', 'LOCAL_KPI_OVERDUE_RATE', '25000'));
+define('KPI_TEMPLATE_RATE', (float)configValue('KPI_TEMPLATE_RATE', 'LOCAL_KPI_TEMPLATE_RATE', '25000'));
+// Маркер описания «по шаблону» и тег ручной отметки просрочки.
+define('KPI_TEMPLATE_MARKER', configValue('KPI_TEMPLATE_MARKER', 'LOCAL_KPI_TEMPLATE_MARKER', 'Название базы'));
+define('KPI_OVERDUE_TAG', configValue('KPI_OVERDUE_TAG', 'LOCAL_KPI_OVERDUE_TAG', 'Просрочил'));
+
 // --- Проверка корректности заполнения задач ---
 
 // Длина результата задачи: до 200 символов — норма, 201-300 — предупреждение,
