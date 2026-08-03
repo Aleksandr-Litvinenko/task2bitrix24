@@ -364,6 +364,233 @@ button span {
     white-space: pre-line;
 }
 
+/* Кнопка-ссылка «Проверка корректности заполнения задач» */
+/* Ссылка, но выглядит как соседние кнопки УНФ (тег <a> не наследует их стили) */
+.quality-action {
+    display: grid;
+    place-items: center;
+    min-height: 58px;
+    border: 1px solid rgba(96, 239, 255, 0.42);
+    border-radius: 8px;
+    color: #eef9ff;
+    font-weight: 900;
+    text-align: center;
+    text-decoration: none;
+}
+
+.quality-action:hover {
+    border-color: rgba(75, 255, 196, 0.6);
+    color: #ffffff;
+}
+
+.quality-action:focus-visible {
+    outline: 3px solid rgba(249, 199, 79, 0.8);
+    outline-offset: 3px;
+}
+
+.action-hint {
+    align-self: center;
+    margin: 0;
+    color: var(--text-soft);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+/* Страница проверки задач */
+.quality-title {
+    font-size: clamp(28px, 3.4vw, 44px);
+    line-height: 1.05;
+}
+
+.quality-checked {
+    position: relative;
+    z-index: 1;
+    margin: 0 0 6px;
+}
+
+.quality-export {
+    display: grid;
+    place-items: center;
+    min-height: 58px;
+    padding: 0 24px;
+    border: 1px solid rgba(96, 239, 255, 0.42);
+    border-radius: 8px;
+    color: #041019;
+    font-weight: 900;
+    text-decoration: none;
+    background: linear-gradient(90deg, var(--cyan), var(--green));
+    box-shadow: 0 16px 32px rgba(55, 174, 255, 0.22);
+}
+
+.quality-export:hover {
+    box-shadow: 0 18px 42px rgba(75, 255, 196, 0.28);
+}
+
+.quality-red-value {
+    color: #ff8d8d;
+}
+
+.quality-yellow-value {
+    color: var(--amber);
+}
+
+.quality-issue-stats {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 16px;
+}
+
+.quality-stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 6px 13px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.quality-stat strong {
+    color: #eef5ff;
+    font-size: 14px;
+}
+
+.quality-stat--red {
+    border-color: rgba(255, 141, 141, 0.42);
+    color: #ff8d8d;
+}
+
+.quality-stat--yellow {
+    border-color: rgba(249, 199, 79, 0.42);
+    color: var(--amber);
+}
+
+.quality-list {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 62vh;
+    margin: 0;
+    padding: 6px;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.quality-row {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--text-soft);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--surface-strong);
+}
+
+.quality-row--red {
+    border-left-color: #ff8d8d;
+}
+
+.quality-row--yellow {
+    border-left-color: var(--amber);
+}
+
+.quality-row-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.quality-badge {
+    flex: 0 0 auto;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.quality-badge--red {
+    background: rgba(255, 141, 141, 0.16);
+    color: #ff8d8d;
+}
+
+.quality-badge--yellow {
+    background: rgba(249, 199, 79, 0.16);
+    color: var(--amber);
+}
+
+.quality-id {
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.quality-name {
+    flex: 1 1 260px;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.3;
+}
+
+.quality-name a {
+    color: #f3f8ff;
+    text-decoration: none;
+}
+
+.quality-name a:hover {
+    color: var(--cyan);
+    text-decoration: underline;
+}
+
+.quality-hours {
+    flex: 0 0 auto;
+    color: var(--green);
+    font-size: 13px;
+    font-weight: 900;
+}
+
+.quality-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 6px 0 0;
+    color: var(--text-soft);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.quality-issues {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 9px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.quality-issue {
+    padding: 4px 10px;
+    border-radius: 7px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.quality-issue--red {
+    background: rgba(255, 141, 141, 0.1);
+    color: #ff8d8d;
+}
+
+.quality-issue--yellow {
+    background: rgba(249, 199, 79, 0.1);
+    color: var(--amber);
+}
+
 /* Отладочный журнал рядом с кнопками УНФ: ход действий и ошибки, листается вверх */
 .action-log {
     align-self: stretch;

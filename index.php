@@ -92,6 +92,13 @@ require __DIR__ . '/partials/head.php';
             </div>
         </dl>
 
+        <div class="unf-action">
+            <a class="secondary-action quality-action" href="quality.php?period=<?= h(rawurlencode($period)) ?>">
+                <span>Проверка корректности заполнения задач</span>
+            </a>
+            <p class="action-hint">Найдёт задачи без часов, без результата, без CRM и проекта — и выгрузит их в Excel.</p>
+        </div>
+
         <?php if (userCan('unf')): ?>
             <div class="unf-action">
                 <button id="createUnfTimeButton" class="secondary-action" type="button">

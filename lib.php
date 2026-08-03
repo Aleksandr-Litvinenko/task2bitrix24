@@ -1549,11 +1549,16 @@ function buildStylesXml(): string
 
 function createXlsx(array $report): string
 {
+    return createXlsxFromSheets(buildWorkbookSheets($report), 'Закрытые часы за ' . (string)$report['month_title']);
+}
+
+function createXlsxFromSheets(array $sheets, string $documentTitle): string
+{
     if (!class_exists(ZipArchive::class)) {
         throw new RuntimeException('Для формирования .xlsx нужен PHP-модуль ZipArchive.');
     }
 
-    $path = tempnam(sys_get_temp_dir(), 'closed-hours-');
+    $path = tempnam(sys_get_temp_dir(), 'taskcrm-');
     if ($path === false) {
         throw new RuntimeException('Не удалось создать временный файл.');
     }
@@ -1567,7 +1572,6 @@ function createXlsx(array $report): string
     }
 
     $created = gmdate('Y-m-d\TH:i:s\Z');
-    $sheets = buildWorkbookSheets($report);
     $sheetCount = count($sheets);
     $contentTypesSheets = '';
     $workbookSheets = '';
@@ -1604,7 +1608,7 @@ function createXlsx(array $report): string
         '</Relationships>');
     $zip->addFromString('docProps/core.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
         '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' .
-        '<dc:title>Закрытые часы за ' . xlsxXml((string)$report['month_title']) . '</dc:title>' .
+        '<dc:title>' . xlsxXml($documentTitle) . '</dc:title>' .
         '<dc:creator>task2.kodar-msk.ru</dc:creator>' .
         '<cp:lastModifiedBy>task2.kodar-msk.ru</cp:lastModifiedBy>' .
         '<dcterms:created xsi:type="dcterms:W3CDTF">' . $created . '</dcterms:created>' .
@@ -2133,6 +2137,482 @@ function loadDashboardSnapshot(string $period): ?array
     $data = json_decode($raw, true);
 
     return is_array($data) ? $data : null;
+}
+
+/* =====================================================================
+ * Проверка корректности заполнения задач
+ * ===================================================================== */
+
+function latestTaskResultText(array $results): string
+{
+    // Берём последний по времени непустой текст результата.
+    foreach (array_reverse($results) as $result) {
+        if (!is_array($result)) {
+            continue;
+        }
+
+        $text = extractTaskResultText($result);
+        if ($text !== '') {
+            return $text;
+        }
+    }
+
+    return '';
+}
+
+function qualityResultDate(string $text): array
+{
+    // Канонический вид: "... (дата выполнения работ 30.06.2026)".
+    $strict = (bool)preg_match(
+        '/\(\s*дата\s+выполнения\s+работ\s+(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})\s*\)/iu',
+        $text,
+        $strictMatch
+    );
+
+    // Свободный вариант: без скобок, "дата выполнения задачи" и т.п.
+    $loose = (bool)preg_match(
+        '/дата\s+выполн\p{L}*(?:\s+\p{L}+){0,3}[^0-9]{0,40}(\d{1,2}[.\/-]\d{1,2}[.\/-]\d{2,4})/iu',
+        $text,
+        $looseMatch
+    );
+
+    $raw = $strict ? $strictMatch[1] : ($loose ? $looseMatch[1] : '');
+
+    return [
+        'date' => $raw !== '' ? parseFlexibleDate($raw) : null,
+        'strict' => $strict,
+        'found' => $strict || $loose,
+        'raw' => $raw,
+    ];
+}
+
+function isRedFlagCompany(int $companyId, string $companyName): bool
+{
+    if ($companyId > 0 && in_array($companyId, array_map('intval', QUALITY_RED_FLAG_COMPANY_IDS), true)) {
+        return true;
+    }
+
+    $name = function_exists('mb_strtolower') ? mb_strtolower(trim($companyName), 'UTF-8') : strtolower(trim($companyName));
+    if ($name === '' || $name === '-') {
+        return false;
+    }
+
+    foreach (QUALITY_RED_FLAG_COMPANY_NAMES as $needle) {
+        $needle = function_exists('mb_strtolower') ? mb_strtolower((string)$needle, 'UTF-8') : strtolower((string)$needle);
+        if ($needle !== '' && mb_strpos($name, $needle) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function textLength(string $text): int
+{
+    return function_exists('mb_strlen') ? mb_strlen($text, 'UTF-8') : strlen($text);
+}
+
+function taskQualityIssues(array $context): array
+{
+    $issues = [];
+    $add = static function (string $severity, string $code, string $text) use (&$issues): void {
+        $issues[] = ['severity' => $severity, 'code' => $code, 'text' => $text];
+    };
+
+    // 1. Нет списанного времени — по такой задаче нечего выставлять.
+    if ((int)$context['minutes'] <= 0) {
+        $add('red', 'zero_hours', 'Не списаны часы');
+    }
+
+    // 2. Результат задачи и дата выполнения работ.
+    $text = (string)$context['result_text'];
+    $length = textLength($text);
+
+    if ($text === '') {
+        $add('red', 'no_result', 'Нет результата задачи');
+    } else {
+        $resultDate = qualityResultDate($text);
+
+        if (!$resultDate['found'] || $resultDate['date'] === null) {
+            $add('red', 'no_result_date', 'В результате нет даты выполнения работ');
+        } else {
+            if ($resultDate['date']->format('Y-m') !== (string)$context['closed_month']) {
+                $add('red', 'month_mismatch', 'Месяц в результате (' . $resultDate['date']->format('m.Y')
+                    . ') не совпадает с месяцем закрытия (' . $context['closed_month_title'] . ')');
+            }
+
+            if (!$resultDate['strict']) {
+                $add('yellow', 'date_format', 'Дата выполнения работ не в формате «(дата выполнения работ ДД.ММ.ГГГГ)»');
+            }
+        }
+
+        if ($length > QUALITY_RESULT_LEN_WARN) {
+            $add('red', 'result_too_long', 'Результат ' . $length . ' символов (больше ' . QUALITY_RESULT_LEN_WARN . ')');
+        } elseif ($length > QUALITY_RESULT_LEN_OK) {
+            $add('yellow', 'result_long', 'Результат ' . $length . ' символов (больше ' . QUALITY_RESULT_LEN_OK . ')');
+        }
+    }
+
+    // 3. Элемент CRM.
+    if ((int)$context['company_id'] <= 0) {
+        $add('red', 'no_crm', 'Не заполнен элемент CRM');
+    }
+
+    // 4. Проект: всем предупреждение, ключевым компаниям — красный флаг.
+    if ((int)$context['group_id'] <= 0) {
+        if (isRedFlagCompany((int)$context['company_id'], (string)$context['company'])) {
+            $add('red', 'no_project_key_client', 'Не заполнен проект у ключевого клиента');
+        } else {
+            $add('yellow', 'no_project', 'Не заполнен проект');
+        }
+    }
+
+    return $issues;
+}
+
+function buildTaskQualityReport(string $period): array
+{
+    set_time_limit(600);
+
+    [$monthStart] = monthPeriod($period);
+    $monthEnd = $monthStart->modify('last day of this month')->setTime(23, 59, 59);
+    $monthTitle = russianMonthTitle($monthStart);
+
+    // Проверяем задачи, закрытые внутри выбранного месяца: именно по ним
+    // менеджер выставляет счета, и именно с ними сверяется дата в результате.
+    $tasks = fetchAllTasks([
+        '>=CLOSED_DATE' => $monthStart->format('Y-m-d H:i:s'),
+        '<=CLOSED_DATE' => $monthEnd->format('Y-m-d H:i:s'),
+        'REAL_STATUS' => REPORT_TASK_STATUSES,
+    ], [
+        'ID',
+        'TITLE',
+        'STATUS',
+        'REAL_STATUS',
+        'CREATED_DATE',
+        'CLOSED_DATE',
+        'RESPONSIBLE_ID',
+        'GROUP_ID',
+        'UF_CRM_TASK',
+    ]);
+
+    $taskIds = [];
+    $tasksById = [];
+    $companyIds = [];
+    $responsibleIds = [];
+    $projectNames = [];
+
+    foreach ($tasks as $task) {
+        $taskId = (int)($task['id'] ?? $task['ID'] ?? 0);
+        if ($taskId <= 0) {
+            continue;
+        }
+
+        $taskIds[] = $taskId;
+        $tasksById[$taskId] = $task;
+
+        $companyId = taskCompanyId($task);
+        if ($companyId > 0) {
+            $companyIds[] = $companyId;
+        }
+
+        $responsibleId = (int)($task['responsibleId'] ?? $task['RESPONSIBLE_ID'] ?? 0);
+        if ($responsibleId > 0) {
+            $responsibleIds[] = $responsibleId;
+        }
+
+        $groupId = (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0);
+        $group = $task['group'] ?? null;
+        if ($groupId > 0 && is_array($group)) {
+            $groupName = trim((string)($group['name'] ?? $group['NAME'] ?? ''));
+            if ($groupName !== '') {
+                $projectNames[$groupId] = $groupName;
+            }
+        }
+    }
+
+    $resultsById = fetchTaskResultsBulk($taskIds);
+    $elapsedByTask = fetchTaskElapsedItemsBulk($taskIds, []);
+    $companyNames = fetchCompanyNamesBulk($companyIds);
+    $userNames = fetchUserNamesBulk($responsibleIds);
+
+    $rows = [];
+    $issueCounts = [];
+    $redTasks = 0;
+    $yellowTasks = 0;
+
+    foreach ($taskIds as $taskId) {
+        $task = $tasksById[$taskId];
+        $closedRaw = (string)($task['closedDate'] ?? $task['CLOSED_DATE'] ?? '');
+        $closedTs = $closedRaw !== '' ? (int)(strtotime($closedRaw) ?: 0) : 0;
+
+        $minutes = 0;
+        foreach ($elapsedByTask[$taskId] ?? [] as $item) {
+            $minutes += (int)($item['MINUTES'] ?? 0);
+        }
+
+        $companyId = taskCompanyId($task);
+        $groupId = (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0);
+        $responsibleId = (int)($task['responsibleId'] ?? $task['RESPONSIBLE_ID'] ?? 0);
+        $resultText = latestTaskResultText($resultsById[$taskId] ?? []);
+        $resultDate = $resultText !== '' ? qualityResultDate($resultText) : ['date' => null, 'strict' => false, 'found' => false];
+
+        $issues = taskQualityIssues([
+            'minutes' => $minutes,
+            'result_text' => $resultText,
+            'company_id' => $companyId,
+            'company' => $companyId > 0 ? ($companyNames[$companyId] ?? '') : '',
+            'group_id' => $groupId,
+            'closed_month' => $closedTs > 0 ? date('Y-m', $closedTs) : $period,
+            'closed_month_title' => $monthTitle,
+        ]);
+
+        if (empty($issues)) {
+            continue;
+        }
+
+        $hasRed = false;
+        foreach ($issues as $issue) {
+            $issueCounts[$issue['code']] = ($issueCounts[$issue['code']] ?? 0) + 1;
+            if ($issue['severity'] === 'red') {
+                $hasRed = true;
+            }
+        }
+
+        $hasRed ? $redTasks++ : $yellowTasks++;
+
+        $rows[] = [
+            'task_id' => $taskId,
+            'title' => trim((string)($task['title'] ?? $task['TITLE'] ?? '')) ?: ('Задача #' . $taskId),
+            'url' => bitrixTaskUrl($taskId, $groupId),
+            'company' => $companyId > 0 ? ($companyNames[$companyId] ?? '-') : '-',
+            'project' => $groupId > 0 ? ($projectNames[$groupId] ?? ('Проект #' . $groupId)) : '',
+            'responsible' => $responsibleId > 0 ? ($userNames[$responsibleId] ?? getUserName($responsibleId)) : '-',
+            'closed_date' => formatTaskDateValue($closedRaw),
+            'closed_ts' => $closedTs,
+            'hours' => round($minutes / 60, 2),
+            'result_text' => $resultText,
+            'result_length' => textLength($resultText),
+            'result_date' => $resultDate['date'] !== null ? $resultDate['date']->format('d.m.Y') : '',
+            'severity' => $hasRed ? 'red' : 'yellow',
+            'issues' => $issues,
+        ];
+    }
+
+    // Сначала красные, внутри — свежие сверху.
+    usort($rows, static function (array $left, array $right): int {
+        if ($left['severity'] !== $right['severity']) {
+            return $left['severity'] === 'red' ? -1 : 1;
+        }
+
+        return $right['closed_ts'] <=> $left['closed_ts'];
+    });
+
+    return [
+        'period' => $period,
+        'month_title' => $monthTitle,
+        'tasks_total' => count($taskIds),
+        'tasks_with_issues' => count($rows),
+        'red_tasks' => $redTasks,
+        'yellow_tasks' => $yellowTasks,
+        'issue_counts' => $issueCounts,
+        'rows' => $rows,
+    ];
+}
+
+function qualitySnapshotPath(string $period): string
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        throw new InvalidArgumentException('Некорректный период проверки.');
+    }
+
+    return dashboardDataDir() . '/quality-' . $period . '.json';
+}
+
+function saveQualitySnapshot(array $report): bool
+{
+    try {
+        $period = (string)($report['period'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+            return false;
+        }
+
+        ensureDashboardDataDir();
+        $report['checked_at'] = date('c');
+        $json = json_encode($report, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            return false;
+        }
+
+        $path = qualitySnapshotPath($period);
+        $tmp = $path . '.tmp';
+        if (file_put_contents($tmp, $json) === false) {
+            return false;
+        }
+
+        return rename($tmp, $path);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function loadQualitySnapshot(string $period): ?array
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        return null;
+    }
+
+    $path = qualitySnapshotPath($period);
+    if (!is_file($path)) {
+        return null;
+    }
+
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return null;
+    }
+
+    $data = json_decode($raw, true);
+
+    return is_array($data) && isset($data['rows']) ? $data : null;
+}
+
+function qualityIssueTitles(): array
+{
+    return [
+        'zero_hours' => 'Не списаны часы',
+        'no_result' => 'Нет результата задачи',
+        'no_result_date' => 'Нет даты выполнения работ в результате',
+        'month_mismatch' => 'Месяц результата ≠ месяц закрытия',
+        'date_format' => 'Дата выполнения работ не по формату',
+        'result_too_long' => 'Результат длиннее ' . QUALITY_RESULT_LEN_WARN . ' символов',
+        'result_long' => 'Результат длиннее ' . QUALITY_RESULT_LEN_OK . ' символов',
+        'no_crm' => 'Не заполнен элемент CRM',
+        'no_project_key_client' => 'Нет проекта у ключевого клиента',
+        'no_project' => 'Не заполнен проект',
+    ];
+}
+
+function qualityIssueSeverities(): array
+{
+    return [
+        'zero_hours' => 'red',
+        'no_result' => 'red',
+        'no_result_date' => 'red',
+        'month_mismatch' => 'red',
+        'no_crm' => 'red',
+        'no_project_key_client' => 'red',
+        'date_format' => 'yellow',
+        'result_too_long' => 'red',
+        'result_long' => 'yellow',
+        'no_project' => 'yellow',
+    ];
+}
+
+function buildQualitySummarySheetXml(array $report): string
+{
+    $titles = qualityIssueTitles();
+    $severities = qualityIssueSeverities();
+    $rows = [];
+
+    $rows[] = ['Показатель', 'Значение'];
+    $rows[] = ['Период', (string)$report['month_title']];
+    $rows[] = ['Задач закрыто за месяц', (int)$report['tasks_total']];
+    $rows[] = ['Задач с замечаниями', (int)$report['tasks_with_issues']];
+    $rows[] = ['Красных задач', (int)$report['red_tasks']];
+    $rows[] = ['Жёлтых задач', (int)$report['yellow_tasks']];
+    $rows[] = ['', ''];
+    $rows[] = ['Замечание', 'Сколько задач'];
+
+    arsort($report['issue_counts']);
+    foreach ($report['issue_counts'] as $code => $count) {
+        $marker = ($severities[$code] ?? 'yellow') === 'red' ? 'Красный' : 'Жёлтый';
+        $rows[] = [$marker . ': ' . ($titles[$code] ?? $code), (int)$count];
+    }
+
+    $body = [];
+    foreach (array_slice($rows, 1) as $row) {
+        $body[] = [
+            ['value' => (string)$row[0], 'style' => 8],
+            is_int($row[1])
+                ? ['value' => $row[1], 'style' => 9]
+                : ['value' => (string)$row[1], 'style' => 8],
+        ];
+    }
+
+    return buildTableSheetXml(['Показатель', 'Значение'], $body, [52, 20]);
+}
+
+function buildQualityTasksSheetXml(array $report): string
+{
+    $headers = [
+        'Серьёзность',
+        'Номер',
+        'Ссылка',
+        'Название',
+        'Компания',
+        'Проект',
+        'Ответственный',
+        'Дата закрытия',
+        'Часы',
+        'Дата в результате',
+        'Длина результата',
+        'Замечания',
+        'Результат задачи',
+    ];
+    $widths = [14, 10, 46, 40, 26, 24, 24, 18, 10, 18, 16, 52, 60];
+
+    $rows = [];
+    foreach ($report['rows'] as $row) {
+        $issueTexts = [];
+        foreach ($row['issues'] as $issue) {
+            $issueTexts[] = ($issue['severity'] === 'red' ? '[!] ' : '[~] ') . $issue['text'];
+        }
+
+        $rows[] = [
+            ['value' => $row['severity'] === 'red' ? 'Красный' : 'Жёлтый', 'style' => 8],
+            ['value' => (string)$row['task_id'], 'style' => 8],
+            ['value' => (string)$row['url'], 'style' => 8],
+            ['value' => (string)$row['title'], 'style' => 8],
+            ['value' => (string)$row['company'], 'style' => 8],
+            ['value' => $row['project'] !== '' ? (string)$row['project'] : '—', 'style' => 8],
+            ['value' => (string)$row['responsible'], 'style' => 8],
+            ['value' => (string)$row['closed_date'], 'style' => 8],
+            ['value' => (float)$row['hours'], 'style' => 9],
+            ['value' => (string)$row['result_date'], 'style' => 8],
+            ['value' => (int)$row['result_length'], 'style' => 9],
+            ['value' => implode("\n", $issueTexts), 'style' => 8],
+            ['value' => (string)$row['result_text'], 'style' => 8],
+        ];
+    }
+
+    return buildTableSheetXml($headers, $rows, $widths);
+}
+
+function downloadQualityXlsx(array $report): void
+{
+    $usedNames = [];
+    $sheets = [
+        [
+            'name' => uniqueWorksheetName('Свод', $usedNames),
+            'xml' => buildQualitySummarySheetXml($report),
+        ],
+        [
+            'name' => uniqueWorksheetName('Задачи с замечаниями', $usedNames),
+            'xml' => buildQualityTasksSheetXml($report),
+        ],
+    ];
+
+    $path = createXlsxFromSheets($sheets, 'Проверка задач за ' . (string)$report['month_title']);
+    $filename = 'Проверка задач ' . $report['period'] . '.xlsx';
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header("Content-Disposition: attachment; filename=\"task-quality-" . $report['period'] . ".xlsx\"; filename*=UTF-8''" . rawurlencode($filename));
+    header('Content-Length: ' . filesize($path));
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    readfile($path);
+    unlink($path);
 }
 
 function listDashboardPeriods(): array

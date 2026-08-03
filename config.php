@@ -93,6 +93,20 @@ define('BOARD_CLOSED_STATUSES', REPORT_TASK_STATUSES);
 // Лимит карточек на колонку проекта, чтобы доска не разрасталась бесконечно.
 define('BOARD_TASKS_PER_PROJECT_LIMIT', 200);
 
+// --- Проверка корректности заполнения задач ---
+
+// Длина результата задачи: до 200 символов — норма, 201-300 — предупреждение,
+// свыше 300 — красный флаг (менеджер не может вставить такой текст в счёт).
+define('QUALITY_RESULT_LEN_OK', (int)configValue('QUALITY_RESULT_LEN_OK', 'LOCAL_QUALITY_RESULT_LEN_OK', '200'));
+define('QUALITY_RESULT_LEN_WARN', (int)configValue('QUALITY_RESULT_LEN_WARN', 'LOCAL_QUALITY_RESULT_LEN_WARN', '300'));
+
+// Компании, для которых незаполненный проект — красный флаг, а не предупреждение.
+// ID точнее, названия подхватывают новые юрлица тех же групп.
+define('QUALITY_RED_FLAG_COMPANY_IDS', configArrayValue('QUALITY_RED_FLAG_COMPANY_IDS', 'LOCAL_QUALITY_RED_FLAG_COMPANY_IDS')
+    ?: [161, 213, 565, 1529]);
+define('QUALITY_RED_FLAG_COMPANY_NAMES', configArrayValue('QUALITY_RED_FLAG_COMPANY_NAMES', 'LOCAL_QUALITY_RED_FLAG_COMPANY_NAMES')
+    ?: ['инситех', 'ройал рэббит', 'лактех']);
+
 // Пользователи из оригинального users.php. Этот список используется как фильтр списанного времени.
 define('REPORT_USER_IDS', [
     1,
