@@ -82,13 +82,13 @@
                 context.beginPath();
                 context.moveTo(previous.x, previous.y);
                 context.lineTo(point.x, point.y);
-                context.strokeStyle = 'rgba(96, 239, 255, ' + (opacity * 0.26) + ')';
+                context.strokeStyle = 'rgba(124, 164, 255, ' + (opacity * 0.26) + ')';
                 context.lineWidth = Math.max(1, scale * 0.45);
                 context.stroke();
             }
 
             var radius = (2.2 + opacity * 3.4) * scale;
-            var fillColor = point.color || '75, 255, 196';
+            var fillColor = point.color || '124, 164, 255';
 
             if (point.sides >= 3) {
                 // Фигуры мини-игры вращаются по мере угасания.
@@ -104,7 +104,7 @@
 
         context.beginPath();
         context.arc(pointer.x, pointer.y, 12, 0, Math.PI * 2);
-        context.strokeStyle = 'rgba(249, 199, 79, 0.24)';
+        context.strokeStyle = 'rgba(150, 175, 230, 0.22)';
         context.lineWidth = 1;
         context.stroke();
 
@@ -120,14 +120,14 @@
        Рекорды сохраняются по логину (Basic Auth). */
     var GAME_GAP_MS = 5000;
     var GAME_HIDE_MS = 10000;
-    /* Палитра циклов: каждые 1000 баллов — новый цвет, фигуры начинаются с круга. */
+    /* Палитра циклов в синей гамме: каждые 1000 баллов — новый оттенок. */
     var GAME_PALETTE = [
-        '75, 255, 196',
-        '249, 199, 79',
-        '255, 141, 141',
-        '52, 120, 246',
-        '188, 134, 255',
-        '96, 239, 255'
+        '124, 164, 255',
+        '96, 190, 255',
+        '150, 140, 255',
+        '80, 210, 235',
+        '175, 160, 255',
+        '110, 145, 235'
     ];
 
     /* Уровни фигур: 0-99 — круг, 100-199 — треугольник, 200-299 — четырёхугольник

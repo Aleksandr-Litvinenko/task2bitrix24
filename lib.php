@@ -2246,10 +2246,9 @@ function taskQualityIssues(array $context): array
             }
         }
 
+        // Один порог длины: до 300 символов — норма, свыше — предупреждение.
         if ($length > QUALITY_RESULT_LEN_WARN) {
-            $add('red', 'result_too_long', 'Результат ' . $length . ' символов (больше ' . QUALITY_RESULT_LEN_WARN . ')');
-        } elseif ($length > QUALITY_RESULT_LEN_OK) {
-            $add('yellow', 'result_long', 'Результат ' . $length . ' символов (больше ' . QUALITY_RESULT_LEN_OK . ')');
+            $add('yellow', 'result_long', 'Результат ' . $length . ' символов (больше ' . QUALITY_RESULT_LEN_WARN . ')');
         }
     }
 
@@ -2258,13 +2257,10 @@ function taskQualityIssues(array $context): array
         $add('red', 'no_crm', 'Не заполнен элемент CRM');
     }
 
-    // 4. Проект: всем предупреждение, ключевым компаниям — красный флаг.
-    if ((int)$context['group_id'] <= 0) {
-        if (isRedFlagCompany((int)$context['company_id'], (string)$context['company'])) {
-            $add('red', 'no_project_key_client', 'Не заполнен проект у ключевого клиента');
-        } else {
-            $add('yellow', 'no_project', 'Не заполнен проект');
-        }
+    // 4. Проект важен только для ключевых клиентов — у остальных не проверяем.
+    if ((int)$context['group_id'] <= 0
+        && isRedFlagCompany((int)$context['company_id'], (string)$context['company'])) {
+        $add('red', 'no_project_key_client', 'Не заполнен проект у ключевого клиента');
     }
 
     return $issues;
@@ -2862,11 +2858,9 @@ function qualityIssueTitles(): array
         'no_result_date' => 'Нет даты выполнения работ в результате',
         'month_mismatch' => 'Месяц результата ≠ месяц закрытия',
         'date_format' => 'Дата выполнения работ не по формату',
-        'result_too_long' => 'Результат длиннее ' . QUALITY_RESULT_LEN_WARN . ' символов',
-        'result_long' => 'Результат длиннее ' . QUALITY_RESULT_LEN_OK . ' символов',
+        'result_long' => 'Результат длиннее ' . QUALITY_RESULT_LEN_WARN . ' символов',
         'no_crm' => 'Не заполнен элемент CRM',
         'no_project_key_client' => 'Нет проекта у ключевого клиента',
-        'no_project' => 'Не заполнен проект',
     ];
 }
 
@@ -2880,9 +2874,7 @@ function qualityIssueSeverities(): array
         'no_crm' => 'red',
         'no_project_key_client' => 'red',
         'date_format' => 'yellow',
-        'result_too_long' => 'red',
         'result_long' => 'yellow',
-        'no_project' => 'yellow',
     ];
 }
 

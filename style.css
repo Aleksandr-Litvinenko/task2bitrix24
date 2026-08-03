@@ -52,13 +52,40 @@ body {
     min-height: 100vh;
     margin: 0;
     overflow-x: hidden;
-    background: var(--bg);
+    /* Тонкая сетка: даёт фактуру, но по контрасту сильно ниже текста */
+    background:
+        linear-gradient(90deg, oklch(0.66 0.1 255 / 0.05) 1px, transparent 1px),
+        linear-gradient(180deg, oklch(0.66 0.1 255 / 0.04) 1px, transparent 1px),
+        var(--bg);
+    background-size: 56px 56px, 56px 56px, auto;
 }
 
-/* Декоративный слой оставлен пустым: сетка, лучи и пульсирующее пятно убраны —
-   они конкурировали с данными за внимание. */
+/* Мягкий синий свет, медленно гуляющий за сеткой */
 .ambient-glow {
-    display: none;
+    position: fixed;
+    top: -30vh;
+    left: -20vw;
+    z-index: 0;
+    width: max(60vw, 780px);
+    height: max(60vw, 780px);
+    pointer-events: none;
+    background:
+        radial-gradient(circle, oklch(0.6 0.15 258 / 0.22) 0%, oklch(0.55 0.13 268 / 0.1) 38%, transparent 68%),
+        radial-gradient(circle at 68% 60%, oklch(0.62 0.12 232 / 0.12), transparent 46%);
+    filter: blur(26px);
+    opacity: 0.9;
+    animation: ambientDrift 46s ease-in-out infinite alternate;
+    will-change: transform;
+}
+
+@keyframes ambientDrift {
+    from {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    to {
+        transform: translate3d(72vw, 10vh, 0) scale(1.12);
+    }
 }
 
 #cursorTrail {
@@ -73,6 +100,8 @@ body {
     z-index: 2;
     min-height: 100vh;
     display: grid;
+    /* minmax(0, …) не даёт широкой доске распирать сетку и уносить макет вправо */
+    grid-template-columns: minmax(0, 1fr);
     align-content: start;
     justify-items: center;
     gap: 18px;
@@ -82,6 +111,9 @@ body {
 .panel {
     position: relative;
     width: min(1240px, 100%);
+    /* Без этого содержимое с горизонтальным скроллом растягивает панель */
+    min-width: 0;
+    max-width: 100%;
     border-radius: var(--radius-lg);
     padding: 28px;
     background: var(--surface);
@@ -753,6 +785,11 @@ a {
     #cursorTrail {
         display: none;
     }
+
+    .ambient-glow {
+        animation: none;
+        transform: translate3d(30vw, 0, 0);
+    }
 }
 
 /* =====================================================================
@@ -894,6 +931,7 @@ a {
     z-index: 1;
     display: flex;
     gap: 16px;
+    max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 6px 2px 16px;
@@ -1399,14 +1437,17 @@ a {
     content: none;
 }
 
+/* Фильтры — вторичные переключатели: заливка акцентом остаётся
+   за навигацией и главной кнопкой */
 .filter-toggle[aria-pressed="true"] {
-    border-color: rgba(96, 239, 255, 0.5);
-    color: #041019;
-    background: var(--accent);
+    border-color: var(--line-strong);
+    color: var(--text);
+    background: var(--surface-strong);
 }
 
 .filter-toggle[aria-pressed="false"] {
-    opacity: 0.66;
+    color: var(--text-soft);
+    opacity: 0.7;
 }
 
 .task-card.is-filtered-out {

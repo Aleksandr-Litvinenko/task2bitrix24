@@ -47,6 +47,7 @@ if ($gameUserLogin === '') {
     <script>window.CC_USER = <?= json_encode($gameUserLogin, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?>;</script>
 </head>
 <body>
+<div class="ambient-glow" aria-hidden="true"></div>
 <canvas id="cursorTrail" aria-hidden="true"></canvas>
 <main class="shell<?= $shellClass !== '' ? ' ' . h($shellClass) : '' ?>">
     <nav class="topnav panel" aria-label="Основная навигация">
