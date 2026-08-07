@@ -377,8 +377,15 @@ function monthPeriod(string $period): array
         throw new InvalidArgumentException('Некорректный месяц отчёта.');
     }
 
-    $createdStart = $monthStart->modify('-7 days')->setTime(0, 0, 0);
-    $createdEnd = $monthStart->modify('last day of this month')->modify('+7 days')->setTime(23, 59, 59);
+    // Окно поиска закрытых задач: на REPORT_CLOSED_WINDOW_MONTHS месяцев
+    // раньше начала месяца и на столько же позже его конца.
+    $window = max(0, (int)REPORT_CLOSED_WINDOW_MONTHS);
+    $createdStart = $monthStart->modify('-' . $window . ' months')->setTime(0, 0, 0);
+    $createdEnd = $monthStart
+        ->modify('last day of this month')
+        ->modify('+' . $window . ' months')
+        ->modify('last day of this month')
+        ->setTime(23, 59, 59);
 
     return [$monthStart, $createdStart, $createdEnd];
 }
@@ -452,7 +459,8 @@ function fetchTasksClosedForReport(DateTimeImmutable $closedStart, DateTimeImmut
         'filter' => [
             '>=CLOSED_DATE' => $closedStart->format('Y-m-d H:i:s'),
             '<=CLOSED_DATE' => $closedEnd->format('Y-m-d H:i:s'),
-            'REAL_STATUS' => REPORT_TASK_STATUSES,
+            // Только завершённые: «условно завершена» ждёт одобрения.
+            'REAL_STATUS' => REPORT_CLOSED_STATUSES,
         ],
         'select' => [
             'ID',
@@ -973,9 +981,9 @@ function fetchCrmCompanies(bool $forceRefresh = false): array
 
 function buildClosedHoursReport(string $period, array $filterCompanyIds = []): array
 {
-    // Отчёт делает десятки REST-запросов и на больших месяцах не укладывается
-    // в стандартные 30 секунд max_execution_time.
-    set_time_limit(600);
+    // Отчёт делает сотни REST-запросов: окно поиска шире месяца, и на каждую
+    // задачу читаются результат и списания времени.
+    set_time_limit(1800);
 
     [$monthStart, $periodStart, $periodEnd] = monthPeriod($period);
 

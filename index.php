@@ -213,6 +213,7 @@ require __DIR__ . '/partials/head.php';
         }
 
         var companyPeriod = document.getElementById('companyPeriod');
+        var closedWindowMonths = <?= (int)REPORT_CLOSED_WINDOW_MONTHS ?>;
 
         function syncPeriodFromSelects() {
             periodInput.value = periodYear.value + '-' + pad(periodMonth.value);
@@ -232,13 +233,9 @@ require __DIR__ . '/partials/head.php';
             var parts = value.split('-');
             var year = Number(parts[0]);
             var monthIndex = Number(parts[1]) - 1;
-            var monthStart = new Date(Date.UTC(year, monthIndex, 1));
-            var monthEnd = new Date(Date.UTC(year, monthIndex + 1, 0));
-            var closedFrom = new Date(monthStart.getTime());
-            var closedTo = new Date(monthEnd.getTime());
-
-            closedFrom.setUTCDate(closedFrom.getUTCDate() - 7);
-            closedTo.setUTCDate(closedTo.getUTCDate() + 7);
+            // Окно поиска: closedWindowMonths месяцев до начала месяца и после его конца
+            var closedFrom = new Date(Date.UTC(year, monthIndex - closedWindowMonths, 1));
+            var closedTo = new Date(Date.UTC(year, monthIndex + closedWindowMonths + 1, 0));
 
             monthTitle.textContent = monthNames[monthIndex] + ' ' + year;
             resultMonthValue.textContent = pad(monthIndex + 1) + '.' + year;

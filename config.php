@@ -74,8 +74,16 @@ define('UNF_WORK_ORDER_UPLIFT', (float)configValue('UNF_WORK_ORDER_UPLIFT', 'LOC
 define('UNF_WORK_ORDER_RATE', (float)configValue('UNF_WORK_ORDER_RATE', 'LOCAL_UNF_WORK_ORDER_RATE', '4500'));
 define('UNF_EMPLOYEE_KEY_MAP', configArrayValue('UNF_EMPLOYEE_KEY_MAP', 'LOCAL_UNF_EMPLOYEE_KEY_MAP'));
 
-// Оригинальный task/csv_closed.php считает закрытые задачи по REAL_STATUS 4 и 5.
+// Доска, проверка задач и KPI считают закрытыми и «условно завершена» (4), и «завершена» (5).
 define('REPORT_TASK_STATUSES', [4, 5]);
+
+// В Excel-отчёт закрытых часов идут только полностью завершённые задачи:
+// «условно завершена» (4) ещё ждёт одобрения и в счёт не выставляется.
+define('REPORT_CLOSED_STATUSES', configArrayValue('REPORT_CLOSED_STATUSES', 'LOCAL_REPORT_CLOSED_STATUSES') ?: [5]);
+
+// Ширина окна поиска вокруг отчётного месяца (в месяцах): задачу могли
+// закрыть заметно позже или раньше даты выполнения работ из результата.
+define('REPORT_CLOSED_WINDOW_MONTHS', (int)configValue('REPORT_CLOSED_WINDOW_MONTHS', 'LOCAL_REPORT_CLOSED_WINDOW_MONTHS', '2'));
 
 // --- Новый интерфейс: навигация, доска задач, дашборд ---
 
