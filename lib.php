@@ -45,8 +45,10 @@ function bitrixRequest(string $method, array $data = [], int $attempt = 0): arra
             // resolve/connect/timeout/SSL, а также обрывы уже установленного
             // соединения: 52 GOT_NOTHING, 55 SEND_ERROR, 56 RECV_ERROR
             $networkErrors = [6, 7, 28, 35, 52, 55, 56];
-            if (in_array($errno, $networkErrors, true) && $attempt < 3) {
-                sleep(1);
+            if (in_array($errno, $networkErrors, true) && $attempt < 6) {
+                // Длинные отчёты идут минутами, и один обрыв не должен ронять
+                // всю выгрузку: ждём дольше с каждой попыткой.
+                sleep(min(1 + $attempt, 5));
                 return bitrixRequest($method, $data, $attempt + 1);
             }
 
@@ -1345,12 +1347,13 @@ function detailHeaders(bool $includePerformer): array
         'Комментарии',
     ];
 
+    // Сначала когда потрачены часы, затем кто их списал
+    $headers[] = 'Дата списания';
+
     if ($includePerformer) {
         $headers[] = 'Кто списал время';
     }
 
-    // Когда часы фактически потрачены
-    $headers[] = 'Дата списания';
     $headers[] = 'Затрачено';
 
     if ($includePerformer) {
@@ -1364,11 +1367,12 @@ function detailWidths(bool $includePerformer): array
 {
     $widths = [10, 34, 22, 18, 18, 22, 22, 18, 18, 22, 48, 48];
 
+    $widths[] = 18;
+
     if ($includePerformer) {
         $widths[] = 30;
     }
 
-    $widths[] = 18;
     $widths[] = 12;
 
     if ($includePerformer) {
@@ -1398,11 +1402,12 @@ function detailRow(array $detail, bool $includePerformer, bool $blankTaskColumns
         ['value' => (string)$detail['comment'], 'style' => 8],
     ]);
 
+    $values[] = ['value' => (string)($detail['spent_at'] ?? '-'), 'style' => 8];
+
     if ($includePerformer) {
         $values[] = ['value' => (string)$detail['performer_text'], 'style' => 8];
     }
 
-    $values[] = ['value' => (string)($detail['spent_at'] ?? '-'), 'style' => 8];
     $values[] = ['value' => (float)$detail['hours'], 'style' => 9];
 
     if ($includePerformer) {
@@ -1560,9 +1565,23 @@ function buildWorkbookSheets(array $report): array
     $usedNames = [];
     $sheets = [];
 
+    // Отчёт по выбранным компаниям — только общий лист задач.
+    if (!empty($report['filter_company_ids'])) {
+        return [[
+            'name' => uniqueWorksheetName('Все задачи', $usedNames),
+            'xml' => buildAllTasksSheetXml($report),
+        ]];
+    }
+
     $sheets[] = [
         'name' => uniqueWorksheetName('Свод', $usedNames),
         'xml' => buildSheetXml($report),
+    ];
+
+    // «Все задачи» идут сразу за сводом, детализация по людям — после.
+    $sheets[] = [
+        'name' => uniqueWorksheetName('Все задачи', $usedNames),
+        'xml' => buildAllTasksSheetXml($report),
     ];
 
     foreach ($report['rows'] as $employee) {
@@ -1571,11 +1590,6 @@ function buildWorkbookSheets(array $report): array
             'xml' => buildEmployeeSheetXml($employee),
         ];
     }
-
-    $sheets[] = [
-        'name' => uniqueWorksheetName('Все задачи', $usedNames),
-        'xml' => buildAllTasksSheetXml($report),
-    ];
 
     return $sheets;
 }

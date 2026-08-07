@@ -370,35 +370,64 @@ button span {
 .company-controls {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
-    align-items: start;
+    align-items: center;
     gap: 12px;
 }
 
-.company-controls select[multiple] {
-    min-height: 0;
-    padding: 6px;
-    background: var(--bg);
+/* Выбранные компании — чипы с крестиком */
+.company-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 4px;
 }
 
-.company-controls select[multiple] option {
-    padding: 5px 8px;
-    border-radius: 4px;
-    color: var(--text);
-    background: transparent;
-}
-
-.company-controls select[multiple] option:checked {
-    color: var(--accent-text);
-    background: var(--accent);
-}
-
-.company-controls select[multiple] optgroup {
-    padding: 4px 0;
+.company-chips[data-empty="true"]::before {
+    content: "Компании не выбраны — отчёт будет по всем";
     color: var(--text-soft);
-    font-size: 12px;
-    font-style: normal;
+    font-size: 13px;
     font-weight: 600;
-    background: var(--bg);
+}
+
+.company-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px 5px 12px;
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--surface-strong);
+    box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.company-chip-remove {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    min-width: 0;
+    height: 20px;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--text-soft);
+    font-size: 16px;
+    line-height: 1;
+    background: transparent;
+    box-shadow: none;
+    transition: color 120ms ease-out, background-color 120ms ease-out;
+}
+
+.company-chip-remove:hover {
+    color: var(--accent-text);
+    background: var(--danger);
+}
+
+.company-chip-remove:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
 }
 
 .company-controls .secondary-action {

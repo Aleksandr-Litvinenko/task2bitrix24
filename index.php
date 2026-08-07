@@ -95,19 +95,22 @@ require __DIR__ . '/partials/head.php';
                 <input type="hidden" name="period" id="companyPeriod" value="<?= h($period) ?>">
                 <label for="companySelect">Отчёт по выбранным компаниям</label>
                 <p class="action-hint company-hint">
-                    Тот же период, но только задачи выбранных клиентов.
-                    Держите Ctrl (⌘ на Mac), чтобы выбрать несколько.
+                    Тот же период, но только задачи выбранных клиентов. В файле будет один лист «Все задачи».
                 </p>
+                <div id="companyChips" class="company-chips" role="list" aria-label="Выбранные компании"></div>
+                <div id="companyInputs" hidden></div>
+
                 <div class="company-controls">
-                    <select id="companySelect" name="companies[]" multiple size="8" aria-label="Компании для отчёта">
+                    <select id="companyPicker" aria-label="Добавить компанию в отчёт">
+                        <option value="">Добавить компанию…</option>
                         <?php if (!empty($targetCompanies)): ?>
-                            <optgroup label="Целевые клиенты">
+                            <optgroup label="Целевые клиенты" data-group="target">
                                 <?php foreach ($targetCompanies as $company): ?>
-                                    <option value="<?= (int)$company['id'] ?>" selected><?= h($company['title']) ?></option>
+                                    <option value="<?= (int)$company['id'] ?>"><?= h($company['title']) ?></option>
                                 <?php endforeach; ?>
                             </optgroup>
                         <?php endif; ?>
-                        <optgroup label="Остальные компании">
+                        <optgroup label="Остальные компании" data-group="other">
                             <?php foreach ($otherCompanies as $company): ?>
                                 <option value="<?= (int)$company['id'] ?>"><?= h($company['title']) ?></option>
                             <?php endforeach; ?>
@@ -117,6 +120,10 @@ require __DIR__ . '/partials/head.php';
                         <span>Скачать отчёт по выбранным компаниям</span>
                     </button>
                 </div>
+
+                <script id="companyPreset" type="application/json"><?= json_encode(array_map(static function (array $company): array {
+                    return ['id' => (int)$company['id'], 'title' => (string)$company['title']];
+                }, $targetCompanies), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) ?></script>
                 <?php if (empty($companies)): ?>
                     <p class="action-hint">Справочник компаний пока не загружен — откройте страницу ещё раз или проверьте связь с Битриксом.</p>
                 <?php endif; ?>
@@ -214,6 +221,120 @@ require __DIR__ . '/partials/head.php';
 
         var companyPeriod = document.getElementById('companyPeriod');
         var closedWindowMonths = <?= (int)REPORT_CLOSED_WINDOW_MONTHS ?>;
+
+        /* Компании-фильтры: выбранные висят чипами сверху и пропадают
+           из выпадающего списка; крестик возвращает компанию обратно. */
+        (function () {
+            var picker = document.getElementById('companyPicker');
+            var chips = document.getElementById('companyChips');
+            var inputs = document.getElementById('companyInputs');
+            var preset = document.getElementById('companyPreset');
+            if (!picker || !chips || !inputs) {
+                return;
+            }
+
+            function optionGroupFor(id) {
+                // Целевые клиенты возвращаются в свою группу, остальные — в свою.
+                var groups = picker.querySelectorAll('optgroup');
+                for (var i = 0; i < groups.length; i++) {
+                    if (groups[i].dataset.group === 'target' && presetIds.indexOf(id) !== -1) {
+                        return groups[i];
+                    }
+                    if (groups[i].dataset.group === 'other' && presetIds.indexOf(id) === -1) {
+                        return groups[i];
+                    }
+                }
+                return picker;
+            }
+
+            function restoreOption(id, title) {
+                var group = optionGroupFor(id);
+                var option = document.createElement('option');
+                option.value = String(id);
+                option.textContent = title;
+
+                // Возвращаем на место по алфавиту, а не в конец списка
+                var siblings = group.querySelectorAll('option');
+                for (var i = 0; i < siblings.length; i++) {
+                    if (siblings[i].textContent.localeCompare(title, 'ru') > 0) {
+                        group.insertBefore(option, siblings[i]);
+                        return;
+                    }
+                }
+                group.appendChild(option);
+            }
+
+            function addCompany(id, title) {
+                id = String(id);
+
+                var chip = document.createElement('span');
+                chip.className = 'company-chip';
+                chip.setAttribute('role', 'listitem');
+
+                var label = document.createElement('span');
+                label.textContent = title;
+                chip.appendChild(label);
+
+                var remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'company-chip-remove';
+                remove.setAttribute('aria-label', 'Убрать ' + title);
+                remove.textContent = '×';
+                chip.appendChild(remove);
+
+                var input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'companies[]';
+                input.value = id;
+                inputs.appendChild(input);
+
+                remove.addEventListener('click', function () {
+                    chip.remove();
+                    input.remove();
+                    restoreOption(id, title);
+                    updateEmptyState();
+                });
+
+                chips.appendChild(chip);
+
+                var option = picker.querySelector('option[value="' + id + '"]');
+                if (option) {
+                    option.remove();
+                }
+
+                updateEmptyState();
+            }
+
+            function updateEmptyState() {
+                var isEmpty = chips.querySelectorAll('.company-chip').length === 0;
+                chips.dataset.empty = isEmpty ? 'true' : 'false';
+            }
+
+            var presetIds = [];
+            var presetList = [];
+            try {
+                presetList = JSON.parse(preset ? preset.textContent : '[]') || [];
+            } catch (error) {
+                presetList = [];
+            }
+            presetList.forEach(function (company) {
+                presetIds.push(String(company.id));
+            });
+            presetList.forEach(function (company) {
+                addCompany(company.id, company.title);
+            });
+
+            picker.addEventListener('change', function () {
+                if (!picker.value) {
+                    return;
+                }
+                var selected = picker.options[picker.selectedIndex];
+                addCompany(picker.value, selected.textContent.trim());
+                picker.value = '';
+            });
+
+            updateEmptyState();
+        }());
 
         function syncPeriodFromSelects() {
             periodInput.value = periodYear.value + '-' + pad(periodMonth.value);
