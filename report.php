@@ -25,9 +25,18 @@ try {
         throw new InvalidArgumentException('Не выбран месяц отчёта.');
     }
 
-    $report = buildClosedHoursReport($period);
-    // Обновляем снимок дашборда при каждой выгрузке Excel.
-    saveDashboardSnapshot($report);
+    // Необязательный фильтр по компаниям (кнопка «по выбранным компаниям»).
+    $companyIds = $_GET['companies'] ?? [];
+    $companyIds = is_array($companyIds) ? array_map('intval', $companyIds) : [];
+
+    $report = buildClosedHoursReport($period, $companyIds);
+
+    // Снимок дашборда обновляем только по полному отчёту:
+    // отфильтрованная выгрузка не должна затирать статистику месяца.
+    if (empty($companyIds)) {
+        saveDashboardSnapshot($report);
+    }
+
     downloadXlsx($report);
 } catch (Throwable $e) {
     $styleVersion = is_file(__DIR__ . '/style.css') ? (string)filemtime(__DIR__ . '/style.css') : '1';

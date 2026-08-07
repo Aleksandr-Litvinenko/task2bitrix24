@@ -93,6 +93,11 @@ define('BOARD_CLOSED_STATUSES', REPORT_TASK_STATUSES);
 // Лимит карточек на колонку проекта, чтобы доска не разрасталась бесконечно.
 define('BOARD_TASKS_PER_PROJECT_LIMIT', 200);
 
+// Компании, предвыбранные в фильтре «Скачать отчёт по выбранным компаниям»:
+// Инситех, Инситех-Девелопмент, Реалток, Ройал Рэббит, Лактех.
+define('REPORT_DEFAULT_COMPANY_IDS', configArrayValue('REPORT_DEFAULT_COMPANY_IDS', 'LOCAL_REPORT_DEFAULT_COMPANY_IDS')
+    ?: [161, 213, 215, 565, 1529]);
+
 // --- KPI по созданным задачам ---
 // Формулы повторяют рабочий файл «РезультатыМесяца»:
 //   KPI 1 = зачётные задачи / 100 * 30000

@@ -31,6 +31,20 @@ $monthSelectNames = [
 $firstYear = min((int)date('Y') - 3, $selectedYear);
 $lastYear = max((int)date('Y') + 1, $selectedYear);
 
+// Справочник компаний для фильтра отчёта (из суточного кеша).
+// Целевых клиентов поднимаем наверх — иначе они теряются среди сотен строк.
+$companies = userCan('excel') ? fetchCrmCompanies() : [];
+$defaultCompanyIds = array_map('intval', REPORT_DEFAULT_COMPANY_IDS);
+$targetCompanies = [];
+$otherCompanies = [];
+foreach ($companies as $company) {
+    if (in_array((int)$company['id'], $defaultCompanyIds, true)) {
+        $targetCompanies[] = $company;
+    } else {
+        $otherCompanies[] = $company;
+    }
+}
+
 $pageTitle = 'Закрытые часы';
 $navActive = 'main';
 require __DIR__ . '/partials/head.php';
@@ -75,6 +89,39 @@ require __DIR__ . '/partials/head.php';
                 <?php endif; ?>
             </div>
         </form>
+
+        <?php if (userCan('excel')): ?>
+            <form class="company-filter" action="report.php" method="get">
+                <input type="hidden" name="period" id="companyPeriod" value="<?= h($period) ?>">
+                <label for="companySelect">Отчёт по выбранным компаниям</label>
+                <p class="action-hint company-hint">
+                    Тот же период, но только задачи выбранных клиентов.
+                    Держите Ctrl (⌘ на Mac), чтобы выбрать несколько.
+                </p>
+                <div class="company-controls">
+                    <select id="companySelect" name="companies[]" multiple size="8" aria-label="Компании для отчёта">
+                        <?php if (!empty($targetCompanies)): ?>
+                            <optgroup label="Целевые клиенты">
+                                <?php foreach ($targetCompanies as $company): ?>
+                                    <option value="<?= (int)$company['id'] ?>" selected><?= h($company['title']) ?></option>
+                                <?php endforeach; ?>
+                            </optgroup>
+                        <?php endif; ?>
+                        <optgroup label="Остальные компании">
+                            <?php foreach ($otherCompanies as $company): ?>
+                                <option value="<?= (int)$company['id'] ?>"><?= h($company['title']) ?></option>
+                            <?php endforeach; ?>
+                        </optgroup>
+                    </select>
+                    <button type="submit" class="secondary-action">
+                        <span>Скачать отчёт по выбранным компаниям</span>
+                    </button>
+                </div>
+                <?php if (empty($companies)): ?>
+                    <p class="action-hint">Справочник компаний пока не загружен — откройте страницу ещё раз или проверьте связь с Битриксом.</p>
+                <?php endif; ?>
+            </form>
+        <?php endif; ?>
 
         <dl class="meta">
             <div>
@@ -165,8 +212,14 @@ require __DIR__ . '/partials/head.php';
             return pad(date.getUTCDate()) + '.' + pad(date.getUTCMonth() + 1) + '.' + date.getUTCFullYear();
         }
 
+        var companyPeriod = document.getElementById('companyPeriod');
+
         function syncPeriodFromSelects() {
             periodInput.value = periodYear.value + '-' + pad(periodMonth.value);
+            // Форма отчёта по компаниям использует тот же выбранный месяц
+            if (companyPeriod) {
+                companyPeriod.value = periodInput.value;
+            }
             updateMeta();
         }
 

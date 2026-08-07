@@ -352,6 +352,65 @@ button span {
     white-space: pre-line;
 }
 
+/* Отчёт по выбранным компаниям */
+.company-filter {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 8px;
+    margin-top: 22px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+}
+
+.company-hint {
+    margin: -2px 0 4px;
+}
+
+.company-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    align-items: start;
+    gap: 12px;
+}
+
+.company-controls select[multiple] {
+    min-height: 0;
+    padding: 6px;
+    background: var(--bg);
+}
+
+.company-controls select[multiple] option {
+    padding: 5px 8px;
+    border-radius: 4px;
+    color: var(--text);
+    background: transparent;
+}
+
+.company-controls select[multiple] option:checked {
+    color: var(--accent-text);
+    background: var(--accent);
+}
+
+.company-controls select[multiple] optgroup {
+    padding: 4px 0;
+    color: var(--text-soft);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 600;
+    background: var(--bg);
+}
+
+.company-controls .secondary-action {
+    align-self: stretch;
+}
+
+@media (max-width: 720px) {
+    .company-controls {
+        grid-template-columns: 1fr;
+    }
+}
+
 /* Кнопка-ссылка «Проверка корректности заполнения задач» */
 /* Ссылка, но выглядит как соседние кнопки УНФ (тег <a> не наследует их стили) */
 .quality-action {

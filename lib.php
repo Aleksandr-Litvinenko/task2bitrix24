@@ -42,7 +42,9 @@ function bitrixRequest(string $method, array $data = [], int $attempt = 0): arra
             // У bitrix24.ru несколько A-записей, и часть IP может не отвечать.
             // Сетевые ошибки (DNS, connect, timeout, SSL) ретраим: новый хэндл
             // заново резолвит адрес и с большой вероятностью попадает на живой.
-            $networkErrors = [6, 7, 28, 35]; // CURLE_COULDNT_RESOLVE_HOST, COULDNT_CONNECT, OPERATION_TIMEDOUT, SSL_CONNECT_ERROR
+            // resolve/connect/timeout/SSL, а также обрывы уже установленного
+            // соединения: 52 GOT_NOTHING, 55 SEND_ERROR, 56 RECV_ERROR
+            $networkErrors = [6, 7, 28, 35, 52, 55, 56];
             if (in_array($errno, $networkErrors, true) && $attempt < 3) {
                 sleep(1);
                 return bitrixRequest($method, $data, $attempt + 1);
@@ -831,7 +833,7 @@ function fetchTaskElapsedItems(int $taskId, array $userIds): array
             'TASKID' => $taskId,
             'ORDER' => ['ID' => 'asc'],
             'FILTER' => !empty($userIds) ? ['USER_ID' => $userIds] : ['>ID' => 0],
-            'SELECT' => ['ID', 'TASK_ID', 'USER_ID', 'MINUTES', 'COMMENT_TEXT'],
+            'SELECT' => ['ID', 'TASK_ID', 'USER_ID', 'MINUTES', 'COMMENT_TEXT', 'DATE_START', 'CREATED_DATE'],
             'PARAMS' => [
                 'NAV_PARAMS' => [
                     'nPageSize' => $pageSize,
@@ -876,7 +878,7 @@ function fetchTaskElapsedItemsBulk(array $taskIds, array $userIds): array
             'TASKID' => $taskId,
             'ORDER' => ['ID' => 'asc'],
             'FILTER' => !empty($userIds) ? ['USER_ID' => $userIds] : ['>ID' => 0],
-            'SELECT' => ['ID', 'TASK_ID', 'USER_ID', 'MINUTES', 'COMMENT_TEXT'],
+            'SELECT' => ['ID', 'TASK_ID', 'USER_ID', 'MINUTES', 'COMMENT_TEXT', 'DATE_START', 'CREATED_DATE'],
             'PARAMS' => [
                 'NAV_PARAMS' => [
                     'nPageSize' => 50,
@@ -910,7 +912,66 @@ function fetchTaskElapsedItemsBulk(array $taskIds, array $userIds): array
     return $result;
 }
 
-function buildClosedHoursReport(string $period): array
+function companiesCachePath(): string
+{
+    return dashboardDataDir() . '/companies.json';
+}
+
+/**
+ * Справочник компаний CRM для выбора в фильтре отчёта.
+ * Кешируется на сутки: в базе ~900 компаний, тянуть их при каждом
+ * открытии главной слишком долго.
+ */
+function fetchCrmCompanies(bool $forceRefresh = false): array
+{
+    $path = companiesCachePath();
+
+    if (!$forceRefresh && is_file($path) && (time() - (int)filemtime($path)) < 86400) {
+        $raw = file_get_contents($path);
+        $cached = $raw !== false ? json_decode($raw, true) : null;
+        if (is_array($cached) && !empty($cached)) {
+            return $cached;
+        }
+    }
+
+    try {
+        $items = bitrixPagedItems('crm.company.list', [
+            'select' => ['ID', 'TITLE'],
+            'order' => ['TITLE' => 'ASC'],
+        ], ['result']);
+    } catch (Throwable $e) {
+        // Битрикс недоступен — отдаём то, что успели закешировать.
+        $raw = is_file($path) ? file_get_contents($path) : false;
+        $cached = $raw !== false ? json_decode($raw, true) : null;
+
+        return is_array($cached) ? $cached : [];
+    }
+
+    $companies = [];
+    foreach ($items as $item) {
+        $id = (int)($item['ID'] ?? 0);
+        $title = trim((string)($item['TITLE'] ?? ''));
+        if ($id > 0 && $title !== '') {
+            $companies[] = ['id' => $id, 'title' => $title];
+        }
+    }
+
+    usort($companies, static function (array $left, array $right): int {
+        return strnatcasecmp($left['title'], $right['title']);
+    });
+
+    if (!empty($companies)) {
+        ensureDashboardDataDir();
+        $json = json_encode($companies, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json !== false) {
+            file_put_contents($path, $json, LOCK_EX);
+        }
+    }
+
+    return $companies;
+}
+
+function buildClosedHoursReport(string $period, array $filterCompanyIds = []): array
 {
     // Отчёт делает десятки REST-запросов и на больших месяцах не укладывается
     // в стандартные 30 секунд max_execution_time.
@@ -956,6 +1017,17 @@ function buildClosedHoursReport(string $period): array
         }
     }
 
+    // Необязательный фильтр по компаниям: отчёт только по выбранным клиентам.
+    $filterCompanyIds = array_values(array_unique(array_filter(array_map('intval', $filterCompanyIds))));
+    if (!empty($filterCompanyIds)) {
+        $matchedTaskIds = array_values(array_filter(
+            $matchedTaskIds,
+            static function (int $taskId) use ($tasksById, $filterCompanyIds): bool {
+                return in_array(taskCompanyId($tasksById[$taskId] ?? []), $filterCompanyIds, true);
+            }
+        ));
+    }
+
     $companyIds = [];
     foreach ($matchedTaskIds as $taskId) {
         $companyId = taskCompanyId($tasksById[$taskId] ?? []);
@@ -985,6 +1057,8 @@ function buildClosedHoursReport(string $period): array
                 'minutes' => 0,
                 'hours' => 0,
                 'comment' => '-',
+                'spent_at' => '-',
+                'spent_ts' => 0,
                 'performer_text' => '-',
             ]);
             continue;
@@ -1009,12 +1083,19 @@ function buildClosedHoursReport(string $period): array
 
             $userName = $rows[$userId]['name'];
             $comment = trim((string)($item['COMMENT_TEXT'] ?? ''));
+            // Когда часы фактически потрачены; если начало не заполнено — дата записи.
+            $spentRaw = (string)($item['DATE_START'] ?? '');
+            if ($spentRaw === '') {
+                $spentRaw = (string)($item['CREATED_DATE'] ?? '');
+            }
             $detail = array_merge($baseDetails, [
                 'user_id' => $userId,
                 'user_name' => $userName,
                 'minutes' => $minutes,
                 'hours' => round($minutes / 60, 2),
                 'comment' => $comment !== '' ? $comment : '-',
+                'spent_at' => formatTaskDateValue($spentRaw),
+                'spent_ts' => $spentRaw !== '' ? (int)(strtotime($spentRaw) ?: 0) : 0,
                 'performer_text' => formatSpentMinutes($minutes) . ' - ' . $userName,
             ]);
 
@@ -1052,6 +1133,8 @@ function buildClosedHoursReport(string $period): array
     return [
         'period' => $period,
         'month_title' => russianMonthTitle($monthStart),
+        'filter_company_ids' => $filterCompanyIds,
+        'filter_company_names' => array_values(array_intersect_key($companyNames, array_flip($filterCompanyIds))),
         'created_start' => $periodStart,
         'created_end' => $periodEnd,
         'rows' => array_values($rows),
@@ -1258,6 +1341,8 @@ function detailHeaders(bool $includePerformer): array
         $headers[] = 'Кто списал время';
     }
 
+    // Когда часы фактически потрачены
+    $headers[] = 'Дата списания';
     $headers[] = 'Затрачено';
 
     if ($includePerformer) {
@@ -1275,6 +1360,7 @@ function detailWidths(bool $includePerformer): array
         $widths[] = 30;
     }
 
+    $widths[] = 18;
     $widths[] = 12;
 
     if ($includePerformer) {
@@ -1308,6 +1394,7 @@ function detailRow(array $detail, bool $includePerformer, bool $blankTaskColumns
         $values[] = ['value' => (string)$detail['performer_text'], 'style' => 8];
     }
 
+    $values[] = ['value' => (string)($detail['spent_at'] ?? '-'), 'style' => 8];
     $values[] = ['value' => (float)$detail['hours'], 'style' => 9];
 
     if ($includePerformer) {
@@ -1327,23 +1414,16 @@ function buildEmployeeSheetXml(array $employee): string
         $rows[] = detailRow($detail, false, false);
     }
 
-    $rows[] = [
-        ['value' => 'Итого', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => '', 'style' => 5],
-        ['value' => (float)$employee['hours'], 'style' => 6],
-    ];
+    // Строка «Итого» подстраивается под число колонок: часы всегда в последней.
+    $headers = detailHeaders(false);
+    $totalRow = [['value' => 'Итого', 'style' => 5]];
+    for ($column = 1, $last = count($headers) - 1; $column < $last; $column++) {
+        $totalRow[] = ['value' => '', 'style' => 5];
+    }
+    $totalRow[] = ['value' => (float)$employee['hours'], 'style' => 6];
+    $rows[] = $totalRow;
 
-    return buildTableSheetXml(detailHeaders(false), $rows, detailWidths(false));
+    return buildTableSheetXml($headers, $rows, detailWidths(false));
 }
 
 function buildAllTasksSheetXml(array $report): string
@@ -1642,10 +1722,13 @@ function createXlsxFromSheets(array $sheets, string $documentTitle): string
 function downloadXlsx(array $report): void
 {
     $path = createXlsx($report);
-    $filename = 'Закрытые часы ' . $report['period'] . '.xlsx';
+    // Отчёт с фильтром отличаем в имени файла, чтобы не путать с общим.
+    $suffix = !empty($report['filter_company_ids']) ? ' (выбранные компании)' : '';
+    $asciiSuffix = !empty($report['filter_company_ids']) ? '-companies' : '';
+    $filename = 'Закрытые часы ' . $report['period'] . $suffix . '.xlsx';
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    header("Content-Disposition: attachment; filename=\"closed-hours-" . $report['period'] . ".xlsx\"; filename*=UTF-8''" . rawurlencode($filename));
+    header("Content-Disposition: attachment; filename=\"closed-hours-" . $report['period'] . $asciiSuffix . ".xlsx\"; filename*=UTF-8''" . rawurlencode($filename));
     header('Content-Length: ' . filesize($path));
     header('Cache-Control: no-store, no-cache, must-revalidate');
 
