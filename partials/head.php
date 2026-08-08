@@ -63,5 +63,11 @@ if ($gameUserLogin === '') {
                     <span><?= h($item['label']) ?></span>
                 </a>
             <?php endforeach; ?>
+            <?php if (function_exists('isGuest') && isGuest()): ?>
+                <?php // Браузер покажет форму пароля только на 401, поэтому ?login=1. ?>
+                <a class="navbtn navbtn--login" href="index.php?login=1" title="Войти под своей учётной записью">
+                    <span>Войти</span>
+                </a>
+            <?php endif; ?>
         </div>
     </nav>

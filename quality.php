@@ -11,7 +11,9 @@ if (!is_string($period) || !preg_match('/^\d{4}-\d{2}$/', $period)) {
     $period = date('Y-m');
 }
 
-$run = isset($_GET['run']) || isset($_GET['export']);
+// Проверка ходит в Битрикс, поэтому гостю она недоступна: ему остаётся
+// последний сохранённый снимок (в замаскированном виде).
+$run = (isset($_GET['run']) || isset($_GET['export'])) && userCan('live');
 $export = ($_GET['export'] ?? '') === 'xlsx';
 
 [$monthStart] = monthPeriod($period);

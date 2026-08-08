@@ -28,3 +28,10 @@ define('LOCAL_UNF_TIME_RATE', '0');
 // Необязательно: новый интерфейс (вкладки Задачи / Дашборд / ХОЧУ ТАКЖЕ).
 // define('LOCAL_TELEGRAM_CHANNEL_URL', 'https://t.me/kodar1c');
 // define('LOCAL_DASHBOARD_DATA_DIR', __DIR__ . '/data');
+
+// Вход без пароля в роли «Гость»: данные замаскированы, кнопки недоступны,
+// запросы в Битрикс запрещены. false — сайт закрыт Basic Auth целиком.
+// define('LOCAL_APP_GUEST_ACCESS', true);
+// define('LOCAL_GUEST_TELEGRAM_URL', 'https://t.me/DED_GENA');
+// Сколько секунд кеш доски считается свежим для гостей.
+// define('LOCAL_BOARD_CACHE_TTL', '900');

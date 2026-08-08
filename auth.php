@@ -7,8 +7,12 @@ require_once __DIR__ . '/config.php';
  * Роли:
  *  - admin    — все права (учётка из config: APP_AUTH_USER/APP_AUTH_PASSWORD);
  *  - employee — Задачи и Дашборд, может скачивать Excel, не может создавать документы в УНФ;
- *  - external — видит всё, но данные замаскированы; не скачивает отчёт и ничего не создаёт.
+ *  - external — видит всё, но данные замаскированы; не скачивает отчёт и ничего не создаёт;
+ *  - guest    — то же, что external, но без пароля: так сайт открывается любому.
  * Дополнительные пользователи хранятся в data/users.json (пароли — password_hash).
+ *
+ * Гостя нельзя завести в data/users.json: это не учётка, а режим «без входа»,
+ * поэтому его нет в AUTH_ROLES — иначе он появился бы в выпадашке админки.
  */
 
 const AUTH_ROLES = [
@@ -16,6 +20,8 @@ const AUTH_ROLES = [
     'employee' => 'Сотрудник',
     'external' => 'Внешний',
 ];
+
+const AUTH_GUEST_ROLE = 'guest';
 
 function usersFilePath(): string
 {
@@ -107,7 +113,17 @@ function requireAuth(): void
         }
     }
 
-    $resolved = authResolveUser((string)$user, (string)$password);
+    $hasCredentials = (string)$user !== '' || (string)$password !== '';
+
+    // Гостевой режим включён и логин/пароль не присланы — пускаем без входа.
+    // Браузер сам не покажет форму, пока сервер не ответит 401, поэтому
+    // «Войти» ведёт на ?login=1: только он и запрашивает пароль.
+    if (!$hasCredentials && APP_GUEST_ACCESS && !isset($_GET['login'])) {
+        $GLOBALS['CURRENT_AUTH_USER'] = ['login' => '', 'role' => AUTH_GUEST_ROLE];
+        return;
+    }
+
+    $resolved = $hasCredentials ? authResolveUser((string)$user, (string)$password) : null;
     if ($resolved === null) {
         header('WWW-Authenticate: Basic realm="Closed Hours"');
         header('HTTP/1.0 401 Unauthorized');
@@ -116,6 +132,11 @@ function requireAuth(): void
     }
 
     $GLOBALS['CURRENT_AUTH_USER'] = $resolved;
+}
+
+function isGuest(): bool
+{
+    return currentUserRole() === AUTH_GUEST_ROLE;
 }
 
 function currentUser(): array
@@ -146,6 +167,11 @@ function userCan(string $permission): bool
         case 'excel':       // скачивание отчёта
         case 'refresh':     // обновление дашборда (ходит в Битрикс)
             return $role === 'admin' || $role === 'employee';
+        case 'live':        // живые запросы в Битрикс при открытии страницы
+            // Гостю нельзя: страница открыта всему интернету, а каждая сборка
+            // доски или проверки задач — это десятки REST-запросов, и анонимный
+            // трафик выжег бы лимиты вебхука для своих.
+            return $role !== AUTH_GUEST_ROLE;
         case 'view':
             return true;
         default:
@@ -155,7 +181,9 @@ function userCan(string $permission): bool
 
 function isMaskedView(): bool
 {
-    return currentUserRole() === 'external';
+    $role = currentUserRole();
+
+    return $role === 'external' || $role === AUTH_GUEST_ROLE;
 }
 
 function maskValue($value): string

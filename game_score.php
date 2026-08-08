@@ -77,8 +77,13 @@ function gameResponse(array $board, string $login): array
         return strnatcasecmp($left['name'], $right['name']);
     });
 
-    $leaders = array_map(static function (array $entry): array {
-        return ['name' => $entry['name'], 'score' => $entry['score']];
+    // Внешним и гостям логины сотрудников не показываем.
+    $masked = isMaskedView();
+    $leaders = array_map(static function (array $entry) use ($masked): array {
+        return [
+            'name' => $masked ? maskValue($entry['name']) : $entry['name'],
+            'score' => $entry['score'],
+        ];
     }, array_slice($board, 0, 10));
 
     $myBest = 0;
@@ -95,6 +100,14 @@ function gameResponse(array $board, string $login): array
 $login = currentUserLogin();
 
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    // Рекорд можно заявить только под своей учёткой: у гостя логина нет,
+    // и анонимные записи в таблицу рекордов нам не нужны.
+    if ($login === '') {
+        http_response_code(403);
+        echo json_encode(['ok' => false, 'error' => 'Рекорды сохраняются только после входа.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
     $input = $_POST;
     if ($input === []) {
         $rawBody = file_get_contents('php://input');

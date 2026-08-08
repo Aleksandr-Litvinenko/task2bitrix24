@@ -29,10 +29,50 @@ $lastYear = max((int)date('Y') + 1, $selectedYear);
 
 $board = null;
 $boardError = '';
-try {
-    $board = buildProjectBoard($view, $period);
-} catch (Throwable $e) {
-    $boardError = $e->getMessage();
+$boardFromCache = false;
+
+if (userCan('live')) {
+    try {
+        $board = buildProjectBoard($view, $period);
+        saveBoardCache($view, $period, $board);
+    } catch (Throwable $e) {
+        $boardError = $e->getMessage();
+    }
+} else {
+    // Гость: только общий кеш. Пересобираем максимум раз в BOARD_CACHE_TTL,
+    // сколько бы анонимных заходов ни было, — вебхук Битрикса не резиновый.
+    $cached = loadBoardCache($view, $period);
+
+    if ($cached !== null && $cached['is_fresh']) {
+        $board = $cached['board'];
+        $boardFromCache = true;
+    } else {
+        // Замок: при наплыве гостей пересобирает один, остальным — старый кеш.
+        $lock = acquireBoardCacheLock($view, $period);
+
+        if ($lock === null) {
+            $board = $cached['board'] ?? null;
+            $boardFromCache = $board !== null;
+            if ($board === null) {
+                $boardError = 'Доска сейчас пересобирается, обновите страницу через минуту.';
+            }
+        } else {
+            try {
+                $board = buildProjectBoard($view, $period);
+                saveBoardCache($view, $period, $board);
+            } catch (Throwable $e) {
+                // Не смогли пересобрать — лучше показать устаревший кеш, чем ошибку.
+                if ($cached !== null) {
+                    $board = $cached['board'];
+                    $boardFromCache = true;
+                } else {
+                    $boardError = $e->getMessage();
+                }
+            } finally {
+                releaseBoardCacheLock($lock);
+            }
+        }
+    }
 }
 
 // Роль "Внешний" видит структуру доски, но данные зашифрованы.

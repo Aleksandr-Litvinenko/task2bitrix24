@@ -473,6 +473,8 @@ function fetchTasksClosedForReport(DateTimeImmutable $closedStart, DateTimeImmut
             'CREATED_BY',
             'RESPONSIBLE_ID',
             'CLOSED_DATE',
+            // Нужен дашборду по проектам: без него задачу не отнести к проекту.
+            'GROUP_ID',
             'UF_CRM_TASK',
             'UF_AUTO_692242927731',
             'UF_AUTO_899199298816',
@@ -808,14 +810,52 @@ function fetchCompanyNamesBulk(array $companyIds): array
     return $result;
 }
 
-function taskBaseDetails(array $task, array $companyNames, string $resultText): array
+function projectNamesForTasks(array $tasks): array
+{
+    $projectNames = [];
+    $groupIds = [];
+
+    foreach ($tasks as $task) {
+        $groupId = (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0);
+        if ($groupId <= 0) {
+            continue;
+        }
+
+        $groupIds[] = $groupId;
+
+        // tasks.task.list отдаёт объект group с названием — используем его,
+        // не требуя у вебхука прав на sonet_group.get.
+        $group = $task['group'] ?? null;
+        if (is_array($group)) {
+            $groupName = trim((string)($group['name'] ?? $group['NAME'] ?? ''));
+            if ($groupName !== '') {
+                $projectNames[$groupId] = $groupName;
+            }
+        }
+    }
+
+    $unnamedGroupIds = array_values(array_diff(array_unique($groupIds), array_keys($projectNames)));
+    if (!empty($unnamedGroupIds)) {
+        $projectNames += fetchProjectNamesBulk($unnamedGroupIds);
+    }
+
+    return $projectNames;
+}
+
+function taskBaseDetails(array $task, array $companyNames, string $resultText, array $projectNames = []): array
 {
     $companyId = taskCompanyId($task);
+    $groupId = (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0);
 
     return [
         'task_id' => (int)($task['id'] ?? $task['ID'] ?? 0),
         'title' => (string)($task['title'] ?? $task['TITLE'] ?? ''),
         'company' => $companyId > 0 ? ($companyNames[$companyId] ?? '-') : '-',
+        // Идентификаторы нужны дашбордам: по названию группировать нельзя,
+        // одна и та же компания может прийти с разным написанием.
+        'company_id' => $companyId,
+        'group_id' => $groupId,
+        'project' => $groupId > 0 ? ($projectNames[$groupId] ?? ('Проект #' . $groupId)) : 'Без проекта',
         'created_date' => formatTaskDateValue($task['createdDate'] ?? $task['CREATED_DATE'] ?? ''),
         'closed_date' => formatTaskDateValue($task['closedDate'] ?? $task['CLOSED_DATE'] ?? ''),
         'creator' => taskPersonName($task, 'creator', 'createdBy'),
@@ -1047,6 +1087,8 @@ function buildClosedHoursReport(string $period, array $filterCompanyIds = []): a
     }
     $companyNames = fetchCompanyNamesBulk($companyIds);
 
+    $projectNames = projectNamesForTasks(array_intersect_key($tasksById, array_flip($matchedTaskIds)));
+
     // Без фильтра по пользователям: в отчёт попадает каждый, кто списал время
     // на подходящую задачу, включая сотрудников, добавленных в Битрикс недавно.
     $elapsedItemsByTask = fetchTaskElapsedItemsBulk($matchedTaskIds, []);
@@ -1057,7 +1099,7 @@ function buildClosedHoursReport(string $period, array $filterCompanyIds = []): a
         $taskId = (int)$taskId;
         $task = $tasksById[$taskId] ?? [];
         $resultText = (string)($matchedResultByTask[$taskId]['text'] ?? '');
-        $baseDetails = taskBaseDetails($task, $companyNames, $resultText);
+        $baseDetails = taskBaseDetails($task, $companyNames, $resultText, $projectNames);
         $matchedTasks[$taskId] = $baseDetails;
 
         if (empty($elapsedItems)) {
@@ -2027,8 +2069,6 @@ function buildProjectBoard(string $mode, string $period): array
 
     $responsibleIds = [];
     $companyIds = [];
-    $groupIds = [];
-    $projectNames = [];
 
     foreach ($tasks as $task) {
         $responsibleId = (int)($task['responsibleId'] ?? $task['RESPONSIBLE_ID'] ?? 0);
@@ -2040,30 +2080,11 @@ function buildProjectBoard(string $mode, string $period): array
         if ($companyId > 0) {
             $companyIds[] = $companyId;
         }
-
-        $groupId = (int)($task['groupId'] ?? $task['GROUP_ID'] ?? 0);
-        if ($groupId > 0) {
-            $groupIds[] = $groupId;
-
-            // tasks.task.list отдаёт объект group с названием — используем его,
-            // не требуя у вебхука прав на sonet_group.get.
-            $group = $task['group'] ?? null;
-            if (is_array($group)) {
-                $groupName = trim((string)($group['name'] ?? $group['NAME'] ?? ''));
-                if ($groupName !== '') {
-                    $projectNames[$groupId] = $groupName;
-                }
-            }
-        }
     }
 
     $userNames = fetchUserNamesBulk($responsibleIds);
     $companyNames = fetchCompanyNamesBulk($companyIds);
-
-    $unnamedGroupIds = array_values(array_diff(array_unique($groupIds), array_keys($projectNames)));
-    if (!empty($unnamedGroupIds)) {
-        $projectNames += fetchProjectNamesBulk($unnamedGroupIds);
-    }
+    $projectNames = projectNamesForTasks($tasks);
 
     $projects = [];
     foreach ($tasks as $task) {
@@ -2134,6 +2155,116 @@ function dashboardDataDir(): string
     return rtrim(DASHBOARD_DATA_DIR, "/\\");
 }
 
+/**
+ * Кеш доски задач для гостей.
+ *
+ * Доска собирается живыми запросами в Битрикс, а гостевая страница открыта
+ * всему интернету. Без кеша каждый анонимный заход стоил бы десятков REST-
+ * запросов, и лимиты вебхука закончились бы у своих. Поэтому гость всегда
+ * читает общий снимок: пересобирается он не чаще, чем раз в BOARD_CACHE_TTL.
+ */
+function boardCachePath(string $mode, string $period): string
+{
+    if (!preg_match('/^\d{4}-\d{2}$/', $period)) {
+        throw new InvalidArgumentException('Некорректный период доски.');
+    }
+
+    $mode = $mode === 'closed' ? 'closed' : 'active';
+
+    return dashboardDataDir() . '/board-' . $mode . '-' . $period . '.json';
+}
+
+function loadBoardCache(string $mode, string $period): ?array
+{
+    try {
+        $path = boardCachePath($mode, $period);
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    if (!is_file($path)) {
+        return null;
+    }
+
+    $raw = file_get_contents($path);
+    if ($raw === false) {
+        return null;
+    }
+
+    $data = json_decode($raw, true);
+    if (!is_array($data) || !isset($data['board']) || !is_array($data['board'])) {
+        return null;
+    }
+
+    $data['age'] = max(0, time() - (int)($data['built_at'] ?? 0));
+    $data['is_fresh'] = $data['age'] < (int)BOARD_CACHE_TTL;
+
+    return $data;
+}
+
+/**
+ * Неблокирующий замок на пересборку доски.
+ *
+ * Если кеш протух и на страницу одновременно пришли десять гостей, собирать
+ * доску должен один: остальные получат устаревший кеш. Воркеры PHP-FPM — это
+ * отдельные процессы, поэтому flock() между ними работает.
+ *
+ * @return resource|null Дескриптор с захваченным замком либо null.
+ */
+function acquireBoardCacheLock(string $mode, string $period)
+{
+    try {
+        ensureDashboardDataDir();
+        $path = boardCachePath($mode, $period) . '.lock';
+    } catch (Throwable $e) {
+        return null;
+    }
+
+    $handle = @fopen($path, 'c');
+    if ($handle === false) {
+        return null;
+    }
+
+    if (!flock($handle, LOCK_EX | LOCK_NB)) {
+        fclose($handle);
+        return null;
+    }
+
+    return $handle;
+}
+
+function releaseBoardCacheLock($handle): void
+{
+    if (is_resource($handle)) {
+        @flock($handle, LOCK_UN);
+        @fclose($handle);
+    }
+}
+
+function saveBoardCache(string $mode, string $period, array $board): bool
+{
+    try {
+        ensureDashboardDataDir();
+        $path = boardCachePath($mode, $period);
+        $json = json_encode([
+            'built_at' => time(),
+            'board' => $board,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) {
+            return false;
+        }
+
+        $tmp = $path . '.tmp';
+        if (file_put_contents($tmp, $json) === false) {
+            return false;
+        }
+
+        return rename($tmp, $path);
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function ensureDashboardDataDir(): string
 {
     $dir = dashboardDataDir();
@@ -2193,7 +2324,74 @@ function dashboardSnapshotFromReport(array $report): array
         'total_hours' => round($totalMinutes / 60, 2),
         'tasks_matched' => (int)($report['tasks_matched'] ?? 0),
         'employees' => $employees,
+        'companies' => dashboardGroupRows($report, 'company_id', 'company', 'Без компании'),
+        'projects' => dashboardGroupRows($report, 'group_id', 'project', 'Без проекта'),
     ];
+}
+
+/**
+ * Сворачивает строки отчёта в рейтинг по произвольному признаку (компания,
+ * проект). Часы берутся из списаний, задачи считаются уникальными: одна задача
+ * с тремя списаниями — это одна задача, а не три.
+ */
+function dashboardGroupRows(array $report, string $idKey, string $nameKey, string $emptyLabel): array
+{
+    $groups = [];
+
+    foreach (($report['all_task_rows'] ?? []) as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        $id = (int)($row[$idKey] ?? 0);
+        $name = trim((string)($row[$nameKey] ?? ''));
+        if ($id <= 0 || $name === '' || $name === '-') {
+            $id = 0;
+            $name = $emptyLabel;
+        }
+
+        if (!isset($groups[$id])) {
+            $groups[$id] = [
+                'id' => $id,
+                'name' => $name,
+                'minutes' => 0,
+                'task_ids' => [],
+            ];
+        }
+
+        $groups[$id]['minutes'] += (int)($row['minutes'] ?? 0);
+
+        $taskId = (int)($row['task_id'] ?? 0);
+        if ($taskId > 0) {
+            $groups[$id]['task_ids'][$taskId] = true;
+        }
+    }
+
+    $rows = [];
+    foreach ($groups as $group) {
+        $rows[] = [
+            'id' => $group['id'],
+            'name' => $group['name'],
+            'minutes' => $group['minutes'],
+            'hours' => round($group['minutes'] / 60, 2),
+            'tasks_count' => count($group['task_ids']),
+        ];
+    }
+
+    usort($rows, static function (array $left, array $right): int {
+        // «Без компании» / «Без проекта» всегда в конце списка.
+        if (($left['id'] === 0) !== ($right['id'] === 0)) {
+            return $left['id'] === 0 ? 1 : -1;
+        }
+
+        if ($left['minutes'] !== $right['minutes']) {
+            return $right['minutes'] <=> $left['minutes'];
+        }
+
+        return strnatcasecmp((string)$left['name'], (string)$right['name']);
+    });
+
+    return $rows;
 }
 
 function saveDashboardSnapshot(array $report): bool

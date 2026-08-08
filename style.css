@@ -761,6 +761,18 @@ button span {
     color: #ffffff;
 }
 
+/* Гостевая кнопка «ХОЧУ ТАКЖЕ» стоит на месте админки и должна звать. */
+.quick-link-grid .quick-link-want {
+    border-color: rgba(96, 239, 255, 0.5);
+    color: #d6fbff;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+}
+.quick-link-grid .quick-link-want:hover {
+    border-color: rgba(96, 239, 255, 0.9);
+    color: #ffffff;
+}
+
 .quick-link-grid a {
     min-height: 50px;
     display: grid;
@@ -938,6 +950,13 @@ a {
 .navbtn.is-active {
     color: var(--accent-text);
     background: var(--accent);
+}
+
+/* «Войти» — не раздел, а действие: уводим вправо и приглушаем. */
+.navbtn--login {
+    min-width: 88px;
+    margin-left: auto;
+    color: var(--cyan);
 }
 
 /* Тулбар доски/дашборда */
@@ -1344,6 +1363,18 @@ a {
     font-size: 12px;
     font-weight: 900;
     letter-spacing: 0.5px;
+}
+
+/* Организации и проекты — не люди: скруглённый квадрат вместо круга,
+   чтобы разрез дашборда читался с одного взгляда. */
+.leader-avatar--companies,
+.leader-avatar--projects {
+    border-radius: 9px;
+}
+
+.leader-avatar--projects {
+    color: #f9c74f;
+    border-color: rgba(249, 199, 79, 0.3);
 }
 
 .leader-row--gold {

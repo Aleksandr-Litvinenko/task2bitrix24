@@ -49,6 +49,13 @@ define('BITRIX_WEBHOOK', configValue('BITRIX_WEBHOOK', 'LOCAL_BITRIX_WEBHOOK'));
 define('APP_AUTH_USER', configValue('APP_AUTH_USER', 'LOCAL_APP_AUTH_USER', 'admin'));
 define('APP_AUTH_PASSWORD', configValue('APP_AUTH_PASSWORD', 'LOCAL_APP_AUTH_PASSWORD', 'change-me'));
 
+// Вход без пароля в роли «Гость»: данные замаскированы, кнопки недоступны,
+// живые запросы в Битрикс запрещены. Выключите, чтобы вернуть закрытый сайт.
+define('APP_GUEST_ACCESS', configBoolValue('APP_GUEST_ACCESS', 'LOCAL_APP_GUEST_ACCESS', true));
+
+// Куда ведёт кнопка «ХОЧУ ТАКЖЕ» у гостя (у остальных на этом месте админка).
+define('GUEST_TELEGRAM_URL', configValue('GUEST_TELEGRAM_URL', 'LOCAL_GUEST_TELEGRAM_URL', 'https://t.me/DED_GENA'));
+
 define('UNF_ODATA_BASE_URL', configValue('UNF_ODATA_BASE_URL', 'LOCAL_UNF_ODATA_BASE_URL', 'https://1cfresh.com/a/sbm/767684/odata/standard.odata'));
 define('UNF_ODATA_USER', configValue('UNF_ODATA_USER', 'LOCAL_UNF_ODATA_USER'));
 define('UNF_ODATA_PASSWORD', configValue('UNF_ODATA_PASSWORD', 'LOCAL_UNF_ODATA_PASSWORD'));
@@ -100,6 +107,9 @@ define('BOARD_CLOSED_STATUSES', REPORT_TASK_STATUSES);
 
 // Лимит карточек на колонку проекта, чтобы доска не разрасталась бесконечно.
 define('BOARD_TASKS_PER_PROJECT_LIMIT', 200);
+
+// Сколько секунд доска из кеша считается свежей для гостей (по умолчанию 15 минут).
+define('BOARD_CACHE_TTL', (int)configValue('BOARD_CACHE_TTL', 'LOCAL_BOARD_CACHE_TTL', '900'));
 
 // Компании, предвыбранные в фильтре «Скачать отчёт по выбранным компаниям»:
 // Инситех, Инситех-Девелопмент, Реалток, Ройал Рэббит, Лактех.

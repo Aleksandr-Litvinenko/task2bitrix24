@@ -83,7 +83,7 @@ require __DIR__ . '/partials/head.php';
                         <span>Скачать Excel</span>
                     </button>
                 <?php else: ?>
-                    <button type="button" disabled title="Недоступно для вашей роли">
+                    <button type="button" disabled title="<?= h(isGuest() ? 'Войдите, чтобы скачать отчёт' : 'Недоступно для вашей роли') ?>">
                         <span>Скачать Excel</span>
                     </button>
                 <?php endif; ?>
@@ -179,6 +179,9 @@ require __DIR__ . '/partials/head.php';
                 <?php endforeach; ?>
                 <?php if (userCan('admin')): ?>
                     <a href="admin.php" class="quick-link-admin">Администрирование</a>
+                <?php elseif (isGuest()): ?>
+                    <?php // У гостя на месте админки — приглашение к автору. ?>
+                    <a href="<?= h(GUEST_TELEGRAM_URL) ?>" class="quick-link-want" target="_blank" rel="noopener noreferrer">ХОЧУ ТАКЖЕ</a>
                 <?php endif; ?>
             </div>
         </div>
