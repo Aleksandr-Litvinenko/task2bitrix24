@@ -24,6 +24,9 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once __DIR__ . '/../lib.php';
+// Нужен для онлайн-проверки OData: без него unfFetchEmployees() не определена
+// и проверка УНФ всегда падала с «Call to undefined function».
+require_once __DIR__ . '/../unf.php';
 
 $online = in_array('--online', $argv, true);
 
