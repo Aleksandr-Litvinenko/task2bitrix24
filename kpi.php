@@ -61,7 +61,7 @@ if ($export && $report !== null && $reportError === '') {
 $maskedView = isMaskedView();
 if ($maskedView && $report !== null) {
     foreach ($report['people'] as &$maskedPerson) {
-        $maskedPerson['name'] = maskValue($maskedPerson['name']);
+        $maskedPerson['name'] = maskValue($maskedPerson['name'], 'employee');
     }
     unset($maskedPerson);
 }

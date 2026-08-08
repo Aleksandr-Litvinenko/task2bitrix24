@@ -186,17 +186,38 @@ function isMaskedView(): bool
     return $role === 'external' || $role === AUTH_GUEST_ROLE;
 }
 
-function maskValue($value): string
+/**
+ * Обезличивает значение, но оставляет понятным, что это за сущность:
+ * не «49FC1B431857BB», а «Сотрудник #3» или «Проект #7».
+ *
+ * Номер выдаётся по порядку первого появления в пределах одной страницы,
+ * поэтому одно и то же имя везде на странице выглядит одинаково, а разные
+ * сущности не сливаются в один номер. Между страницами нумерация своя —
+ * данные всё равно обезличены, а внутри страницы список читается.
+ */
+function maskValue($value, string $kind = 'generic'): string
 {
     $value = trim((string)$value);
     if ($value === '' || $value === '-') {
         return $value;
     }
 
-    $length = function_exists('mb_strlen') ? mb_strlen($value, 'UTF-8') : strlen($value);
-    $take = max(6, min(14, $length));
+    static $labels = [
+        'employee' => 'Сотрудник',
+        'company' => 'Компания',
+        'project' => 'Проект',
+        'task' => 'Задача',
+        'generic' => 'Запись',
+    ];
+    static $registry = [];
 
-    return strtoupper(substr(md5('cc-mask:' . $value), 0, $take));
+    $kind = isset($labels[$kind]) ? $kind : 'generic';
+
+    if (!isset($registry[$kind][$value])) {
+        $registry[$kind][$value] = count($registry[$kind] ?? []) + 1;
+    }
+
+    return $labels[$kind] . ' #' . $registry[$kind][$value];
 }
 
 function maskNumber(): string

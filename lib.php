@@ -2394,6 +2394,63 @@ function dashboardGroupRows(array $report, string $idKey, string $nameKey, strin
     return $rows;
 }
 
+/**
+ * Проставляет в снимок изменения относительно предыдущего снимка того же
+ * месяца: у кого часов прибавилось, у кого убавилось. Считается по минутам —
+ * округление до часов не должно превращать 0 в «+0».
+ *
+ * Сравнивать не с чем (первый снимок месяца) — изменений просто нет.
+ * Раздел, которого в старом снимке ещё не было (организации и проекты в
+ * снимках до августа 2026), пропускаем целиком: иначе всё разом показало бы
+ * прирост «с нуля», хотя часы не менялись.
+ */
+function attachDashboardDeltas(array $snapshot, ?array $previous): array
+{
+    // Сначала снимаем старые пометки: раздел, который сравнить не удастся,
+    // не должен остаться с изменениями от прошлого расчёта.
+    foreach (['employees', 'companies', 'projects'] as $section) {
+        if (!isset($snapshot[$section]) || !is_array($snapshot[$section])) {
+            continue;
+        }
+
+        foreach ($snapshot[$section] as &$resetRow) {
+            unset($resetRow['delta_minutes'], $resetRow['delta_hours']);
+        }
+        unset($resetRow);
+    }
+    unset($snapshot['compared_to']);
+
+    if ($previous === null) {
+        return $snapshot;
+    }
+
+    foreach (['employees', 'companies', 'projects'] as $section) {
+        if (!isset($previous[$section]) || !is_array($previous[$section]) || !isset($snapshot[$section])) {
+            continue;
+        }
+
+        $previousMinutes = [];
+        foreach ($previous[$section] as $previousRow) {
+            if (is_array($previousRow)) {
+                $previousMinutes[(int)($previousRow['id'] ?? 0)] = (int)($previousRow['minutes'] ?? 0);
+            }
+        }
+
+        foreach ($snapshot[$section] as &$row) {
+            $delta = (int)($row['minutes'] ?? 0) - ($previousMinutes[(int)($row['id'] ?? 0)] ?? 0);
+            if ($delta !== 0) {
+                $row['delta_minutes'] = $delta;
+                $row['delta_hours'] = round($delta / 60, 2);
+            }
+        }
+        unset($row);
+    }
+
+    $snapshot['compared_to'] = (string)($previous['updated_at'] ?? '');
+
+    return $snapshot;
+}
+
 function saveDashboardSnapshot(array $report): bool
 {
     try {
@@ -2403,7 +2460,9 @@ function saveDashboardSnapshot(array $report): bool
         }
 
         ensureDashboardDataDir();
-        $snapshot = dashboardSnapshotFromReport($report);
+        // Предыдущий снимок читаем до записи — иначе сравнивать будет не с чем.
+        $previous = loadDashboardSnapshot($period);
+        $snapshot = attachDashboardDeltas(dashboardSnapshotFromReport($report), $previous);
         $json = json_encode($snapshot, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         if ($json === false) {
             return false;

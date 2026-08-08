@@ -19,9 +19,9 @@ if (is_string($requestedPeriod) && preg_match('/^\d{4}-\d{2}$/', $requestedPerio
 
 // Три дашборда на одной странице: по сотрудникам, организациям и проектам.
 $dashViews = [
-    'employees' => ['label' => 'По сотрудникам', 'unit' => 'Сотрудников', 'empty' => 'Сотрудников за этот месяц нет.'],
-    'companies' => ['label' => 'По организациям', 'unit' => 'Организаций', 'empty' => 'Организаций за этот месяц нет.'],
-    'projects' => ['label' => 'По проектам', 'unit' => 'Проектов', 'empty' => 'Проектов за этот месяц нет.'],
+    'employees' => ['label' => 'По сотрудникам', 'unit' => 'Сотрудников', 'empty' => 'Сотрудников за этот месяц нет.', 'mask' => 'employee'],
+    'companies' => ['label' => 'По организациям', 'unit' => 'Организаций', 'empty' => 'Организаций за этот месяц нет.', 'mask' => 'company'],
+    'projects' => ['label' => 'По проектам', 'unit' => 'Проектов', 'empty' => 'Проектов за этот месяц нет.', 'mask' => 'project'],
 ];
 
 $view = $_GET['view'] ?? 'employees';
@@ -55,7 +55,7 @@ $viewRows = ['employees' => $employees, 'companies' => $companies, 'projects' =>
 $maskedView = isMaskedView();
 if ($maskedView) {
     foreach ($viewRows as &$maskedRow) {
-        $maskedRow['name'] = maskValue($maskedRow['name'] ?? '');
+        $maskedRow['name'] = maskValue($maskedRow['name'] ?? '', $dashViews[$view]['mask']);
         $maskedRow['photo'] = '';
     }
     unset($maskedRow);
@@ -171,6 +171,11 @@ require __DIR__ . '/partials/head.php';
 
                     $photo = trim((string)($row['photo'] ?? ''));
                     $initialsSource = preg_split('/\s+/u', trim((string)($row['name'] ?? '')), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+                    // Берём только слова, начинающиеся с буквы: иначе «Компания #1»
+                    // превращается в «К#», а «ООО "Ромашка"» — в «О"».
+                    $initialsSource = array_values(array_filter($initialsSource, static function (string $word): bool {
+                        return (bool)preg_match('/^\p{L}/u', $word);
+                    }));
                     $initials = '';
                     foreach (array_slice($initialsSource, 0, 2) as $word) {
                         $initials .= mb_substr($word, 0, 1, 'UTF-8');
@@ -187,6 +192,19 @@ require __DIR__ . '/partials/head.php';
                         <div class="leader-body">
                             <div class="leader-line">
                                 <span class="leader-name"><?= h((string)($row['name'] ?? '-')) ?></span>
+                                <?php
+                                // Изменение с прошлого обновления. Гостю показываем
+                                // только направление: сами часы у него скрыты.
+                                $deltaHours = (float)($row['delta_hours'] ?? 0);
+                                if ($deltaHours != 0.0):
+                                    $isUp = $deltaHours > 0;
+                                    $deltaLabel = $maskedView
+                                        ? ($isUp ? '▲' : '▼')
+                                        : ($isUp ? '+' : '−') . number_format(abs($deltaHours), 2, '.', ' ') . ' ч';
+                                    ?>
+                                    <span class="leader-delta leader-delta--<?= $isUp ? 'up' : 'down' ?>"
+                                          title="Изменение с прошлого обновления"><?= h($deltaLabel) ?></span>
+                                <?php endif; ?>
                                 <span class="leader-hours"><?= $maskedView ? h(maskNumber()) : h(number_format($hours, 2, '.', ' ')) . ' ч' ?></span>
                             </div>
                             <div class="leader-bar"><span style="width: <?= $barWidth ?>%"></span></div>

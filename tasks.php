@@ -79,12 +79,12 @@ if (userCan('live')) {
 $maskedView = isMaskedView();
 if ($maskedView && is_array($board)) {
     foreach ($board['projects'] as &$maskedProject) {
-        $maskedProject['name'] = maskValue($maskedProject['name']);
+        $maskedProject['name'] = maskValue($maskedProject['name'], 'project');
         $maskedProject['url'] = '';
         foreach ($maskedProject['tasks'] as &$maskedTask) {
-            $maskedTask['title'] = maskValue($maskedTask['title']);
-            $maskedTask['responsible'] = maskValue($maskedTask['responsible']);
-            $maskedTask['company'] = $maskedTask['company'] !== '-' ? maskValue($maskedTask['company']) : '-';
+            $maskedTask['title'] = maskValue($maskedTask['title'], 'task');
+            $maskedTask['responsible'] = maskValue($maskedTask['responsible'], 'employee');
+            $maskedTask['company'] = $maskedTask['company'] !== '-' ? maskValue($maskedTask['company'], 'company') : '-';
             $maskedTask['url'] = '';
         }
         unset($maskedTask);

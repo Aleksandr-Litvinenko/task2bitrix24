@@ -81,7 +81,7 @@ function gameResponse(array $board, string $login): array
     $masked = isMaskedView();
     $leaders = array_map(static function (array $entry) use ($masked): array {
         return [
-            'name' => $masked ? maskValue($entry['name']) : $entry['name'],
+            'name' => $masked ? maskValue($entry['name'], 'employee') : $entry['name'],
             'score' => $entry['score'],
         ];
     }, array_slice($board, 0, 10));

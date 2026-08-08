@@ -64,10 +64,10 @@ if ($export && $report !== null && $reportError === '') {
 $maskedView = isMaskedView();
 if ($maskedView && $report !== null) {
     foreach ($report['rows'] as &$maskedRow) {
-        $maskedRow['title'] = maskValue($maskedRow['title']);
-        $maskedRow['company'] = $maskedRow['company'] !== '-' ? maskValue($maskedRow['company']) : '-';
-        $maskedRow['project'] = $maskedRow['project'] !== '' ? maskValue($maskedRow['project']) : '';
-        $maskedRow['responsible'] = maskValue($maskedRow['responsible']);
+        $maskedRow['title'] = maskValue($maskedRow['title'], 'task');
+        $maskedRow['company'] = $maskedRow['company'] !== '-' ? maskValue($maskedRow['company'], 'company') : '-';
+        $maskedRow['project'] = $maskedRow['project'] !== '' ? maskValue($maskedRow['project'], 'project') : '';
+        $maskedRow['responsible'] = maskValue($maskedRow['responsible'], 'employee');
         $maskedRow['result_text'] = '';
         $maskedRow['url'] = '';
     }
