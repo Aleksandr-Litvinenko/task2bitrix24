@@ -6,6 +6,10 @@ require_once __DIR__ . '/config.php';
 const UNF_ZERO_GUID = '00000000-0000-0000-0000-000000000000';
 const UNF_DAY_ZERO_TIME = '0001-01-01T00:00:00';
 
+// Предохранитель на число строк в «Операциях»: 10 строк — это 1680 часов,
+// вчетверо больше самого длинного месяца. Дальше данные точно битые.
+const UNF_TIME_MAX_OPERATION_ROWS = 10;
+
 function unfOdataRequest(string $method, string $path, ?array $payload = null, array $params = []): array
 {
     if (UNF_ODATA_USER === '' || UNF_ODATA_PASSWORD === '') {
@@ -447,17 +451,45 @@ function unfBuildTimeDocumentPayload(
     DateTimeImmutable $dateTo
 ): array {
     $hours = round((float)($row['hours'] ?? 0), 2);
-    $dayDurations = unfDistributeHours($hours);
+    $operationRows = unfDistributeHours($hours);
     $rate = round((float)UNF_TIME_RATE, 2);
-    $sum = round($rate * $hours, 2);
 
     // Время "С"/"По" по дням: 24 ч -> 00:00-23:59, 22 ч -> 00:00-22:00 и т.д.
     $dayPrefixes = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-    $dayTimes = [];
-    foreach ($dayPrefixes as $index => $prefix) {
-        $duration = (float)($dayDurations[$index] ?? 0);
-        $dayTimes[$prefix . 'ВремяНачала'] = UNF_DAY_ZERO_TIME;
-        $dayTimes[$prefix . 'ВремяОкончания'] = $duration > 0 ? unfTimeOfDay($duration) : UNF_DAY_ZERO_TIME;
+
+    // Одна строка табличной части вмещает максимум 168 часов (7 дней по 24),
+    // поэтому остаток уходит в следующую строку и снова считается с понедельника.
+    $operations = [];
+    foreach ($operationRows as $index => $dayDurations) {
+        $rowHours = round(array_sum($dayDurations), 2);
+
+        $dayTimes = [];
+        foreach ($dayPrefixes as $dayIndex => $prefix) {
+            $duration = (float)($dayDurations[$dayIndex] ?? 0);
+            $dayTimes[$prefix . 'ВремяНачала'] = UNF_DAY_ZERO_TIME;
+            $dayTimes[$prefix . 'ВремяОкончания'] = $duration > 0 ? unfTimeOfDay($duration) : UNF_DAY_ZERO_TIME;
+        }
+
+        $operations[] = [
+            'LineNumber' => (string)($index + 1),
+            'Заказчик' => '',
+            'Заказчик_Type' => 'StandardODATA.Undefined',
+            'ВидРабот_Key' => UNF_TIME_WORK_TYPE_KEY,
+            'Номенклатура_Key' => UNF_TIME_NOMENCLATURE_KEY,
+            'Характеристика_Key' => UNF_ZERO_GUID,
+            'Расценка' => $rate,
+            'ВидЦен_Key' => UNF_TIME_PRICE_TYPE_KEY,
+            'Всего' => $rowHours,
+            'ПнДлительность' => $dayDurations[0],
+            'ВтДлительность' => $dayDurations[1],
+            'СрДлительность' => $dayDurations[2],
+            'ЧтДлительность' => $dayDurations[3],
+            'ПтДлительность' => $dayDurations[4],
+            'СбДлительность' => $dayDurations[5],
+            'ВсДлительность' => $dayDurations[6],
+            'Сумма' => round($rate * $rowHours, 2),
+            'Комментарий' => '',
+        ] + $dayTimes;
     }
 
     return [
@@ -473,28 +505,7 @@ function unfBuildTimeDocumentPayload(
         'Автор_Key' => UNF_TIME_AUTHOR_KEY,
         'ХозяйственнаяОперация_Key' => UNF_TIME_BUSINESS_OPERATION_KEY,
         'ДокументОснование_Key' => UNF_ZERO_GUID,
-        'Операции' => [
-            [
-                'LineNumber' => '1',
-                'Заказчик' => '',
-                'Заказчик_Type' => 'StandardODATA.Undefined',
-                'ВидРабот_Key' => UNF_TIME_WORK_TYPE_KEY,
-                'Номенклатура_Key' => UNF_TIME_NOMENCLATURE_KEY,
-                'Характеристика_Key' => UNF_ZERO_GUID,
-                'Расценка' => $rate,
-                'ВидЦен_Key' => UNF_TIME_PRICE_TYPE_KEY,
-                'Всего' => $hours,
-                'ПнДлительность' => $dayDurations[0],
-                'ВтДлительность' => $dayDurations[1],
-                'СрДлительность' => $dayDurations[2],
-                'ЧтДлительность' => $dayDurations[3],
-                'ПтДлительность' => $dayDurations[4],
-                'СбДлительность' => $dayDurations[5],
-                'ВсДлительность' => $dayDurations[6],
-                'Сумма' => $sum,
-                'Комментарий' => '',
-            ] + $dayTimes,
-        ],
+        'Операции' => $operations,
     ];
 }
 
@@ -526,6 +537,16 @@ function unfTimeDocumentComment(array $row, string $period): string
     return trim('#Загружено_task2; загружено ' . unfFormatHours($hours) . ' ч за ' . $period . '; Bitrix user ' . $bitrixUserId . '; ' . $name);
 }
 
+/**
+ * Раскладывает часы по дням недели строками табличной части.
+ *
+ * В одну строку «Операций» помещается максимум 168 часов — 7 дней по 24.
+ * Если часов больше, остаток уходит в следующую строку и снова считается с
+ * понедельника: ровно так документ заполняется руками (эталон — КДНФ-000085,
+ * где 168.5 ч легли как 168 в первой строке и 0.5 во второй).
+ *
+ * @return array<int, array<int, float>> Список строк, в каждой 7 длительностей.
+ */
 function unfDistributeHours(float $hours): array
 {
     if ($hours < 0) {
@@ -533,27 +554,42 @@ function unfDistributeHours(float $hours): array
     }
 
     $remaining = round($hours, 2);
-    $days = [];
+    $rows = [];
 
-    for ($day = 0; $day < 7; $day++) {
-        $duration = min(24.0, max(0.0, $remaining));
-        $duration = round($duration, 2);
-        $days[] = $duration;
-        $remaining = round($remaining - $duration, 2);
-    }
+    do {
+        $days = [];
+        for ($day = 0; $day < 7; $day++) {
+            $duration = min(24.0, max(0.0, $remaining));
+            $duration = round($duration, 2);
+            $days[] = $duration;
+            $remaining = round($remaining - $duration, 2);
+        }
+
+        $rows[] = $days;
+    } while ($remaining > 0 && count($rows) < UNF_TIME_MAX_OPERATION_ROWS);
 
     if ($remaining > 0) {
-        throw new RuntimeException('В документ УНФ за одну неделю нельзя разложить больше 168 часов.');
+        // В месяце физически не больше 744 часов, так что сюда попадают только
+        // испорченные данные — молча резать часы в документе для счёта нельзя.
+        throw new RuntimeException(sprintf(
+            'Не удалось разложить %s ч: это больше %d часов, максимума для %d строк документа. Проверьте списания времени в Битриксе.',
+            unfFormatHours($hours),
+            UNF_TIME_MAX_OPERATION_ROWS * 168,
+            UNF_TIME_MAX_OPERATION_ROWS
+        ));
     }
 
-    return $days;
+    return $rows;
 }
 
 function unfFindExistingTimeDocument(string $employeeKey, DateTimeImmutable $dateFrom, DateTimeImmutable $dateTo): ?array
 {
+    // Помеченный на удаление документ не считается существующим: иначе после
+    // удаления неудачного документа кнопка молча пропускала бы сотрудника.
     $filter = "Сотрудник_Key eq guid'" . $employeeKey . "'"
         . " and ДатаС eq datetime'" . unfOdataDate($dateFrom) . "'"
-        . " and ДатаПо eq datetime'" . unfOdataDate($dateTo) . "'";
+        . " and ДатаПо eq datetime'" . unfOdataDate($dateTo) . "'"
+        . " and DeletionMark eq false";
 
     $response = unfOdataRequest('GET', 'Document_УчетВремени', null, [
         '$format' => 'json',
@@ -602,7 +638,8 @@ function unfWorkOrderDates(string $period): array
 function unfFindExistingWorkOrder(string $employeeKey, DateTimeImmutable $dateFrom): ?array
 {
     $filter = "Сотрудник_Key eq guid'" . $employeeKey . "'"
-        . " and ДатаНачала eq datetime'" . unfOdataDate($dateFrom) . "'";
+        . " and ДатаНачала eq datetime'" . unfOdataDate($dateFrom) . "'"
+        . " and DeletionMark eq false";
 
     $response = unfOdataRequest('GET', 'Document_ЗаданиеНаРаботу', null, [
         '$format' => 'json',
