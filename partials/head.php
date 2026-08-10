@@ -29,8 +29,12 @@ $navItems = [
     ['key' => 'tasks', 'label' => 'Задачи', 'href' => 'tasks.php' . $navQuery, 'external' => false],
     ['key' => 'dashboard', 'label' => 'Дашборд', 'href' => 'dashboard.php' . $navQuery, 'external' => false],
     ['key' => 'quality', 'label' => 'Проверка задач', 'href' => 'quality.php' . $navQuery, 'external' => false],
-    ['key' => 'kpi', 'label' => 'KPI по задачам', 'href' => 'kpi.php' . $navQuery, 'external' => false],
 ];
+
+// «Расчёт ЗП» — только администратору: внутри оклады и суммы к выплате.
+if (function_exists('userCan') && userCan('payroll')) {
+    $navItems[] = ['key' => 'payroll', 'label' => 'Расчёт ЗП', 'href' => 'kpi.php' . $navQuery, 'external' => false];
+}
 
 $gameUserLogin = trim((string)($_SERVER['PHP_AUTH_USER'] ?? ''));
 if ($gameUserLogin === '') {

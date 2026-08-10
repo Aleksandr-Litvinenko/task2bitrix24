@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 date_default_timezone_set('Europe/Moscow');
 
+// Версия приложения. Показывается внизу страницы — по ней видно, что залито
+// на сервер. История изменений — в CHANGELOG.md.
+define('APP_VERSION', '1.2.0');
+
 $localConfigPath = __DIR__ . '/config.local.php';
 if (is_file($localConfigPath)) {
     require_once $localConfigPath;

@@ -1555,6 +1555,123 @@ a {
     font-weight: 700;
 }
 
+/* ── Расчёт ЗП ─────────────────────────────────────────────────────────── */
+
+.payroll-tabs {
+    margin-bottom: 14px;
+}
+
+/* Таблицы расчёта редактируются прямо в ячейках, поэтому поля должны быть
+   компактными и не разъезжаться по ширине. */
+.cell-input {
+    width: 100px;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+    text-align: inherit;
+    background: var(--bg);
+}
+
+.cell-input:focus-visible {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent-soft);
+    outline-offset: 1px;
+}
+
+.cell-input--narrow {
+    width: 64px;
+}
+
+.cell-input--wide {
+    width: 100%;
+    min-width: 160px;
+    text-align: left;
+}
+
+.num .cell-input {
+    text-align: right;
+}
+
+.terms-table select,
+.payroll-table select {
+    /* Названия схем и режимов KPI длинные — узкий селект их обрезает. */
+    min-width: 168px;
+    padding: 6px 8px;
+    font-size: 13px;
+}
+
+.kpi-assign-cell {
+    text-align: center;
+    white-space: nowrap;
+}
+
+.kpi-assign-cell input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+.data-table tfoot th,
+.data-table tfoot td {
+    padding: 12px 14px;
+    border-top: 2px solid var(--line);
+    font-weight: 700;
+    background: var(--surface-strong);
+}
+
+.payroll-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.payroll-actions .board-hint {
+    flex: 1 1 320px;
+    margin: 0;
+}
+
+.payroll-total {
+    color: var(--success);
+}
+
+.payroll-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+}
+
+.payroll-add-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.payroll-add-form label {
+    color: var(--text-soft);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Версия внизу страницы: видно, что именно залито на сервер. */
+.app-version {
+    margin: 18px 0 4px;
+    color: var(--text-soft);
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    text-align: center;
+    opacity: 0.6;
+}
+
 /* Фильтры статусов на доске задач */
 .board-filters {
     position: relative;
