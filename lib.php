@@ -1783,6 +1783,118 @@ function createXlsxFromSheets(array $sheets, string $documentTitle): string
     return $xlsxPath;
 }
 
+/**
+ * Имя компании для имени файла: без организационно-правовой формы
+ * и без символов, недопустимых в файловой системе.
+ */
+function companyFileLabel(string $title): string
+{
+    $title = trim($title);
+    $title = (string)preg_replace('~\s*\b(ООО|АО|ЗАО|ПАО|ОАО|НКО|АНО)\b\s*~ui', ' ', $title);
+    $title = (string)preg_replace('~[\\\\/:*?"<>|]~u', ' ', $title);
+    $title = trim((string)preg_replace('~\s+~u', ' ', $title));
+
+    return $title !== '' ? $title : 'Без компании';
+}
+
+/**
+ * «Август 2026» -> «август 2026» для имени файла.
+ */
+function reportMonthFileLabel(array $report): string
+{
+    $title = trim((string)($report['month_title'] ?? ''));
+    if ($title === '') {
+        return (string)($report['period'] ?? '');
+    }
+
+    return mb_strtolower(mb_substr($title, 0, 1, 'UTF-8'), 'UTF-8') . mb_substr($title, 1, null, 'UTF-8');
+}
+
+/**
+ * Отдаёт ZIP, где на каждую выбранную компанию свой .xlsx с листом «Все задачи».
+ * $companyTitles — названия всех выбранных компаний, чтобы файл появился
+ * даже у той, у которой за месяц не нашлось задач.
+ */
+function downloadPerCompanyArchive(array $report, array $companyTitles): void
+{
+    if (!class_exists(ZipArchive::class)) {
+        throw new RuntimeException('Для формирования архива нужен PHP-модуль ZipArchive.');
+    }
+
+    $rowsByCompany = [];
+    foreach ((array)($report['all_task_rows'] ?? []) as $row) {
+        $companyId = (int)($row['company_id'] ?? 0);
+        $rowsByCompany[$companyId][] = $row;
+    }
+
+    // Если компании не выбирали, режем по тем, что реально встретились в отчёте.
+    if (empty($companyTitles)) {
+        foreach ($rowsByCompany as $companyId => $rows) {
+            $companyTitles[$companyId] = (string)($rows[0]['company'] ?? 'Без компании');
+        }
+    }
+
+    if (empty($companyTitles)) {
+        throw new RuntimeException('Не из чего формировать выгрузку: за период нет задач.');
+    }
+
+    $monthLabel = reportMonthFileLabel($report);
+    $zipPath = tempnam(sys_get_temp_dir(), 'taskcrm-split-');
+    if ($zipPath === false) {
+        throw new RuntimeException('Не удалось создать временный файл.');
+    }
+
+    $zip = new ZipArchive();
+    if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        throw new RuntimeException('Не удалось создать архив.');
+    }
+
+    $usedFileNames = [];
+    $tempFiles = [];
+    foreach ($companyTitles as $companyId => $companyTitle) {
+        $companyId = (int)$companyId;
+        $rows = $rowsByCompany[$companyId] ?? [];
+
+        $companyReport = $report;
+        $companyReport['all_task_rows'] = $rows;
+
+        $usedSheetNames = [];
+        $xlsxPath = createXlsxFromSheets([[
+            'name' => uniqueWorksheetName('Все задачи', $usedSheetNames),
+            'xml' => buildAllTasksSheetXml($companyReport),
+        ]], 'Выгрузка ' . $companyTitle . ' за ' . $monthLabel);
+
+        $fileName = 'выгрузка ' . companyFileLabel((string)$companyTitle) . ' ' . $monthLabel . '.xlsx';
+        // Две компании могут дать одинаковое имя после чистки — разводим суффиксом.
+        $baseName = $fileName;
+        $index = 2;
+        while (isset($usedFileNames[$fileName])) {
+            $fileName = preg_replace('~\.xlsx$~u', '', $baseName) . ' (' . $index . ').xlsx';
+            $index++;
+        }
+        $usedFileNames[$fileName] = true;
+
+        $zip->addFile($xlsxPath, $fileName);
+        // Файлы нужны до закрытия архива, поэтому удаляем их после $zip->close().
+        $tempFiles[] = $xlsxPath;
+    }
+
+    $zip->close();
+
+    foreach ($tempFiles as $tempFile) {
+        @unlink($tempFile);
+    }
+
+    $downloadName = 'Выгрузки по компаниям ' . $monthLabel . '.zip';
+    header('Content-Type: application/zip');
+    header("Content-Disposition: attachment; filename=\"companies-" . (string)($report['period'] ?? '') . ".zip\"; filename*=UTF-8''" . rawurlencode($downloadName));
+    header('Content-Length: ' . filesize($zipPath));
+    header('Cache-Control: no-store, no-cache, must-revalidate');
+
+    readfile($zipPath);
+    unlink($zipPath);
+}
+
 function downloadXlsx(array $report): void
 {
     $path = createXlsx($report);

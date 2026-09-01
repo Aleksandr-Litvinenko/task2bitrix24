@@ -29,12 +29,33 @@ try {
     $companyIds = $_GET['companies'] ?? [];
     $companyIds = is_array($companyIds) ? array_map('intval', $companyIds) : [];
 
+    // Разрез по компаниям: на каждую выбранную компанию свой файл в архиве.
+    $split = ($_GET["split"] ?? "") === "1";
+    if ($split && empty($companyIds)) {
+        throw new InvalidArgumentException("Выберите хотя бы одну компанию — иначе делить выгрузку не на что.");
+    }
+
     $report = buildClosedHoursReport($period, $companyIds);
 
     // Снимок дашборда обновляем только по полному отчёту:
     // отфильтрованная выгрузка не должна затирать статистику месяца.
     if (empty($companyIds)) {
         saveDashboardSnapshot($report);
+    }
+
+    if ($split) {
+        // Названия берём из справочника: у компании без задач за месяц
+        // всё равно должен получиться свой (пустой) файл.
+        $titles = [];
+        foreach (fetchCrmCompanies() as $company) {
+            $companyId = (int)$company["id"];
+            if (in_array($companyId, $companyIds, true)) {
+                $titles[$companyId] = (string)$company["title"];
+            }
+        }
+
+        downloadPerCompanyArchive($report, $titles);
+        exit;
     }
 
     downloadXlsx($report);

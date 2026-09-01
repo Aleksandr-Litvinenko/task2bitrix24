@@ -95,7 +95,8 @@ require __DIR__ . '/partials/head.php';
                 <input type="hidden" name="period" id="companyPeriod" value="<?= h($period) ?>">
                 <label for="companySelect">Отчёт по выбранным компаниям</label>
                 <p class="action-hint company-hint">
-                    Тот же период, но только задачи выбранных клиентов. В файле будет один лист «Все задачи».
+                    Тот же период, но только задачи выбранных клиентов, лист «Все задачи».
+                    Вторая кнопка отдаёт ZIP: по отдельному файлу на каждую выбранную компанию.
                 </p>
                 <div id="companyChips" class="company-chips" role="list" aria-label="Выбранные компании"></div>
                 <div id="companyInputs" hidden></div>
@@ -118,6 +119,9 @@ require __DIR__ . '/partials/head.php';
                     </select>
                     <button type="submit" class="secondary-action">
                         <span>Скачать отчёт по выбранным компаниям</span>
+                    </button>
+                    <button type="submit" name="split" value="1" class="secondary-action">
+                        <span>Скачать в разрезе компаний</span>
                     </button>
                 </div>
 

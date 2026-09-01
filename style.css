@@ -369,9 +369,13 @@ button span {
 
 .company-controls {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+    grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 12px;
+}
+
+.company-controls .secondary-action {
+    min-width: 220px;
 }
 
 /* Выбранные компании — чипы с крестиком */
